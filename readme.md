@@ -68,6 +68,23 @@ flowchart TD
 ### Secure User Authentication & History
 * **User Accounts**: Built-in account registration and login endpoints utilizing secure SHA-256 password hashing.
 * **Search History Drawer**: Saves all processed documents (images and PDFs) to a SQLite database (`ocr_system.db`). Users can reload previous OCR runs from the drawer instantly without re-processing.
+---
+
+## Technology Stack
+
+| Component | Technology | Description |
+| :--- | :--- | :--- |
+| **Backend Web Framework** | ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi&logoColor=white) | High-performance ASGI web framework for Python |
+| **Frontend Framework** | ![React](https://img.shields.io/badge/React-18.x-61DAFB?style=flat-square&logo=react&logoColor=black) | JavaScript library for building user interfaces |
+| **Programming Languages** | ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white) ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white) | Strongly typed frontend logic and robust backend systems |
+| **Bundler & Tooling** | ![Vite](https://img.shields.io/badge/Vite-8.x-646CFF?style=flat-square&logo=vite&logoColor=white) | Frontend development server and compiler |
+| **OCR Engine** | ![PaddleOCR](https://img.shields.io/badge/PaddleOCR-Latest-orange?style=flat-square) | Optical Character Recognition engine (PaddleX-based) |
+| **Deep Learning Engine** | ![PaddlePaddle](https://img.shields.io/badge/PaddlePaddle-CPU%2FGPU-red?style=flat-square) | High-speed neural network runner |
+| **PDF Core Engine** | ![PyMuPDF](https://img.shields.io/badge/PyMuPDF-1.22+-004B87?style=flat-square) | High-fidelity PDF parsing and text-layer rendering (fitz) |
+| **Image Processing** | ![OpenCV](https://img.shields.io/badge/OpenCV-4.x-5C3EE8?style=flat-square&logo=opencv&logoColor=white) | Real-time computer vision and image enhancement |
+| **Database** | ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=flat-square&logo=sqlite&logoColor=white) | Serverless local storage for user credentials and OCR history drawer |
+| **Document Compilers** | ![python-docx](https://img.shields.io/badge/python--docx-Latest-blue?style=flat-square) | Exporter utility for compiling formatted Word documents |
+| **Numerical Libraries** | ![NumPy](https://img.shields.io/badge/NumPy-1.2x-013243?style=flat-square&logo=numpy&logoColor=white) | Vectorized coordinates math and matrix calculations |
 
 ---
 
