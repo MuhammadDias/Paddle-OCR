@@ -9,14 +9,15 @@ import { StatsCard } from './components/StatsCard';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
 import { Toast } from './components/Toast';
 import type { ToastType } from './components/Toast';
-import { processOCR, checkStatus, getMe } from './services/api';
+import { processOCR, checkStatus, getMe, exportOcrResults } from './services/api';
 import type { OCRResponse, User } from './services/api';
 import { SystemDiagnostics } from './components/SystemDiagnostics';
 import { LandingPage } from './components/LandingPage';
 import { AuthCard } from './components/AuthCard';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { PdfOcrWorkspace } from './components/PdfOcrWorkspace';
-import { Image, ArrowLeft, RefreshCw } from 'lucide-react';
+import { ConfirmationDialog } from './components/ConfirmationDialog';
+import { Image, ArrowLeft, RefreshCw, Download, ChevronDown } from 'lucide-react';
 
 function App() {
   const [file, setFile] = useState<File | null>(null);
@@ -35,6 +36,23 @@ function App() {
   // States for loading PDF from history
   const [pdfHistoryResults, setPdfHistoryResults] = useState<any[] | null>(null);
   const [pdfHistoryFilename, setPdfHistoryFilename] = useState<string | null>(null);
+
+  // Language settings
+  const [lang, setLang] = useState<string>('id');
+
+  // Export & Confirmation dialog states
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState<boolean>(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState<boolean>(false);
+  const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
+  const [confirmTitle, setConfirmTitle] = useState<string>('');
+  const [confirmMsg, setConfirmMsg] = useState<string>('');
+
+  const triggerConfirmation = (title: string, msg: string, action: () => void) => {
+    setConfirmTitle(title);
+    setConfirmMsg(msg);
+    setConfirmAction(() => action);
+    setIsConfirmOpen(true);
+  };
 
   // Guard access to pdf-ocr
   useEffect(() => {
@@ -123,14 +141,26 @@ function App() {
   };
 
   const handleRemoveImage = () => {
-    if (imageUrl && !imageUrl.startsWith('data:image')) {
-      URL.revokeObjectURL(imageUrl);
+    const performRemove = () => {
+      if (imageUrl && !imageUrl.startsWith('data:image')) {
+        URL.revokeObjectURL(imageUrl);
+      }
+      setFile(null);
+      setImageUrl(null);
+      setOcrResponse(null);
+      setSelectedIndex(null);
+      setHoveredIndex(null);
+    };
+
+    if (ocrResponse) {
+      triggerConfirmation(
+        'Proses Gambar Baru',
+        'Apakah Anda yakin ingin memproses gambar lain? Perubahan hasil teks Anda saat ini akan hilang.',
+        performRemove
+      );
+    } else {
+      performRemove();
     }
-    setFile(null);
-    setImageUrl(null);
-    setOcrResponse(null);
-    setSelectedIndex(null);
-    setHoveredIndex(null);
   };
 
   const handleRunOCR = async () => {
@@ -141,7 +171,7 @@ function App() {
     setHoveredIndex(null);
 
     try {
-      const response = await processOCR(file);
+      const response = await processOCR(file, lang);
       setOcrResponse(response);
       handleShowToast('Pemrosesan OCR selesai dengan sukses.', 'success');
     } catch (error: any) {
@@ -170,6 +200,18 @@ function App() {
       setFile(dummyFile);
       setView('workspace');
       handleShowToast(`Memuat riwayat: ${filename}`, 'success');
+    }
+  };
+
+  const handleExport = async (format: 'txt' | 'json' | 'docx' | 'pdf' | 'zip') => {
+    if (!ocrResponse) return;
+    try {
+      setIsExportDropdownOpen(false);
+      handleShowToast('Menyiapkan file ekspor...', 'info');
+      await exportOcrResults(file?.name || 'ocr_result.jpg', ocrResponse, format);
+      handleShowToast('Ekspor berhasil diunduh.', 'success');
+    } catch (err: any) {
+      handleShowToast(err.message || 'Gagal mengekspor hasil.', 'error');
     }
   };
 
@@ -276,6 +318,8 @@ function App() {
                         onRemove={handleRemoveImage}
                         onChangeImage={handleRemoveImage} // will redirect back to dropzone
                         processing={processing}
+                        lang={lang}
+                        onChangeLang={setLang}
                       />
                     </div>
                   )}
@@ -306,13 +350,53 @@ function App() {
                           </div>
                         </div>
 
-                        <button
-                          onClick={handleRemoveImage}
-                          className="flex items-center gap-2 px-4 py-2.5 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-xs font-bold text-indigo-600 rounded-full border border-white transition-all duration-200"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          <span>Proses Gambar Lain</span>
-                        </button>
+                        <div className="flex items-center gap-3 relative">
+                          <button
+                            onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-xs font-bold text-indigo-600 rounded-full border border-white transition-all duration-200"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Ekspor Hasil</span>
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                          
+                          {isExportDropdownOpen && (
+                            <div className="absolute right-32 top-12 z-20 w-44 bg-neo-bg border border-white/60 rounded-neo shadow-neo-card p-1.5 flex flex-col gap-1 animate-scale-in">
+                              <button
+                                onClick={() => handleExport('txt')}
+                                className="w-full text-left px-3 py-1.5 rounded-full text-xs font-bold text-neo-text hover:bg-neo-shadow/15 transition-all text-indigo-600"
+                              >
+                                Text (.txt)
+                              </button>
+                              <button
+                                onClick={() => handleExport('json')}
+                                className="w-full text-left px-3 py-1.5 rounded-full text-xs font-bold text-neo-text hover:bg-neo-shadow/15 transition-all text-indigo-600"
+                              >
+                                JSON (.json)
+                              </button>
+                              <button
+                                onClick={() => handleExport('docx')}
+                                className="w-full text-left px-3 py-1.5 rounded-full text-xs font-bold text-neo-text hover:bg-neo-shadow/15 transition-all text-indigo-600"
+                              >
+                                Word (.docx)
+                              </button>
+                              <button
+                                onClick={() => handleExport('zip')}
+                                className="w-full text-left px-3 py-1.5 rounded-full text-xs font-bold text-neo-text hover:bg-neo-shadow/15 transition-all text-indigo-600"
+                              >
+                                ZIP (Semua Format)
+                              </button>
+                            </div>
+                          )}
+
+                          <button
+                            onClick={handleRemoveImage}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-xs font-bold text-neo-muted rounded-full border border-white transition-all duration-200"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Proses Lain</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Dashboard Stats */}
@@ -340,6 +424,14 @@ function App() {
                         <div className="lg:col-span-5 w-full">
                           <OCRResultList
                             regions={ocrResponse.text_regions}
+                            onChangeRegions={(updated) => {
+                              if (ocrResponse) {
+                                setOcrResponse({
+                                  ...ocrResponse,
+                                  text_regions: updated,
+                                });
+                              }
+                            }}
                             entities={ocrResponse.entities}
                             hoveredIndex={hoveredIndex}
                             selectedIndex={selectedIndex}
@@ -377,6 +469,18 @@ function App() {
         onClose={() => setIsHistoryDrawerOpen(false)}
         onSelectItem={handleSelectHistoryItem}
         onShowToast={handleShowToast}
+      />
+
+      {/* Confirmation Dialog Popup */}
+      <ConfirmationDialog
+        isOpen={isConfirmOpen}
+        title={confirmTitle}
+        message={confirmMsg}
+        onConfirm={() => {
+          setIsConfirmOpen(false);
+          if (confirmAction) confirmAction();
+        }}
+        onCancel={() => setIsConfirmOpen(false)}
       />
 
       {/* Floating Toast Alerts */}

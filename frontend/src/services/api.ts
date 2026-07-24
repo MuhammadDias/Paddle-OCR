@@ -106,11 +106,11 @@ export const checkStatus = async (): Promise<StatusResponse> => {
   return response.data;
 };
 
-export const processOCR = async (file: File): Promise<OCRResponse> => {
+export const processOCR = async (file: File, lang: string = 'id'): Promise<OCRResponse> => {
   const formData = new FormData();
   formData.append('image', file);
 
-  const response = await api.post<OCRResponse>('/ocr', formData);
+  const response = await api.post<OCRResponse>(`/ocr?lang=${lang}`, formData);
   return response.data;
 };
 
@@ -138,7 +138,9 @@ export const getHistory = async (): Promise<HistoryItem[]> => {
 
 export const processPdfOCR = async (
   file: File,
-  onProgress: (update: PDFProgressUpdate) => void
+  onProgress: (update: PDFProgressUpdate) => void,
+  lang: string = 'id',
+  abortSignal?: AbortSignal
 ): Promise<PDFPageResult[]> => {
   const formData = new FormData();
   formData.append('file', file);
@@ -149,10 +151,11 @@ export const processPdfOCR = async (
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}/ocr-pdf`, {
+  const response = await fetch(`${API_BASE_URL}/ocr-pdf?lang=${lang}`, {
     method: 'POST',
     headers,
     body: formData,
+    signal: abortSignal,
   });
 
   if (!response.ok) {
@@ -203,6 +206,55 @@ export const processPdfOCR = async (
   }
 
   return finalResults;
+};
+
+export const exportOcrResults = async (
+  filename: string,
+  results: any,
+  format: 'txt' | 'json' | 'docx' | 'pdf' | 'zip'
+): Promise<void> => {
+  const token = localStorage.getItem('token');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/ocr/export`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ filename, results, format }),
+  });
+
+  if (!response.ok) {
+    let errorDetail = 'Gagal mengekspor hasil OCR.';
+    try {
+      const errorJson = await response.json();
+      errorDetail = errorJson.detail || errorDetail;
+    } catch (_) {}
+    throw new Error(errorDetail);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  
+  // Set filename
+  const baseName = filename.substring(0, filename.lastIndexOf('.')) || filename;
+  if (format === 'zip') {
+    a.download = `${baseName}_all_formats.zip`;
+  } else if (format === 'pdf') {
+    a.download = `${baseName}_searchable.pdf`;
+  } else {
+    a.download = `${baseName}.${format}`;
+  }
+  
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
 };
 
 

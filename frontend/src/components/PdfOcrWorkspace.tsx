@@ -2,10 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { 
   FileText, Upload, Play, X, Trash2, Download, 
-  RefreshCw, Maximize2, AlertTriangle, ZoomIn, ZoomOut, RotateCcw
+  RefreshCw, Maximize2, AlertTriangle, ZoomIn, ZoomOut, RotateCcw,
+  Languages, ChevronDown
 } from 'lucide-react';
-import { processPdfOCR } from '../services/api';
+import { processPdfOCR, exportOcrResults } from '../services/api';
 import type { PDFPageResult, PDFProgressUpdate } from '../services/api';
+import { OcrEditor } from './OcrEditor';
+import { ConfirmationDialog } from './ConfirmationDialog';
 
 interface PdfOcrWorkspaceProps {
   onShowToast: (message: string, type: 'success' | 'error' | 'info') => void;
@@ -31,6 +34,26 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Advanced features states
+  const [lang, setLang] = useState<string>('id');
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState<boolean>(false);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [pageImgDims, setPageImgDims] = useState<Record<number, { width: number; height: number }>>({});
+  
+  // Confirmation states
+  const [isConfirmOpen, setIsConfirmOpen] = useState<boolean>(false);
+  const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
+  const [confirmTitle, setConfirmTitle] = useState<string>('');
+  const [confirmMsg, setConfirmMsg] = useState<string>('');
+
+  const triggerConfirmation = (title: string, msg: string, action: () => void) => {
+    setConfirmTitle(title);
+    setConfirmMsg(msg);
+    setConfirmAction(() => action);
+    setIsConfirmOpen(true);
+  };
+
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Sync initial results from history
@@ -47,76 +70,21 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
     }
   }, [initialResults, initialFilename]);
   
-  // Refs for synchronized scrolling
+  // Refs for left scrolling
   const leftScrollRef = useRef<HTMLDivElement>(null);
-  const rightScrollRef = useRef<HTMLDivElement>(null);
-  const isScrollingLeft = useRef<boolean>(false);
-  const isScrollingRight = useRef<boolean>(false);
-
-  // Sync scroll left to right
-  const handleLeftScroll = () => {
-    if (isScrollingRight.current || !leftScrollRef.current || !rightScrollRef.current) return;
-    isScrollingLeft.current = true;
-    
-    const left = leftScrollRef.current;
-    const right = rightScrollRef.current;
-    const scrollRatio = left.scrollTop / (left.scrollHeight - left.clientHeight);
-    right.scrollTop = scrollRatio * (right.scrollHeight - right.clientHeight);
-    
-    // Also estimate active page based on visible items
-    const pageIndex = Math.round(scrollRatio * (results.length - 1)) + 1;
-    if (pageIndex >= 1 && pageIndex <= results.length) {
-      setActivePage(pageIndex);
-    }
-
-    setTimeout(() => {
-      isScrollingLeft.current = false;
-    }, 50);
-  };
-
-  // Sync scroll right to left
-  const handleRightScroll = () => {
-    if (isScrollingLeft.current || !leftScrollRef.current || !rightScrollRef.current) return;
-    isScrollingRight.current = true;
-    
-    const left = leftScrollRef.current;
-    const right = rightScrollRef.current;
-    const scrollRatio = right.scrollTop / (right.scrollHeight - right.clientHeight);
-    left.scrollTop = scrollRatio * (left.scrollHeight - left.clientHeight);
-    
-    const pageIndex = Math.round(scrollRatio * (results.length - 1)) + 1;
-    if (pageIndex >= 1 && pageIndex <= results.length) {
-      setActivePage(pageIndex);
-    }
-
-    setTimeout(() => {
-      isScrollingRight.current = false;
-    }, 50);
-  };
 
   // Jump to specific page
   const handlePageSelect = (pageNum: number) => {
     setActivePage(pageNum);
+    setSelectedIndex(null);
+    setHoveredIndex(null);
     
-    if (leftScrollRef.current && rightScrollRef.current) {
+    if (leftScrollRef.current) {
       const idx = pageNum - 1;
       const total = results.length;
-      
       const left = leftScrollRef.current;
-      const right = rightScrollRef.current;
-      
       const targetRatio = total > 1 ? idx / (total - 1) : 0;
-      
-      isScrollingLeft.current = true;
-      isScrollingRight.current = true;
-      
       left.scrollTop = targetRatio * (left.scrollHeight - left.clientHeight);
-      right.scrollTop = targetRatio * (right.scrollHeight - right.clientHeight);
-      
-      setTimeout(() => {
-        isScrollingLeft.current = false;
-        isScrollingRight.current = false;
-      }, 100);
     }
   };
 
@@ -154,21 +122,26 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
     abortControllerRef.current = new AbortController();
 
     try {
-      const ocrResults = await processPdfOCR(selectedFile, (update: PDFProgressUpdate) => {
-        if (update.status === 'start' && update.total_pages) {
-          setProgressText(`Mulai memproses. Total ${update.total_pages} halaman.`);
-          setProgressPercent(10);
-        } else if (update.status === 'progress' && update.page && update.total) {
-          const percent = Math.round((update.page / update.total) * 90) + 5;
-          setProgressPercent(percent);
-          setProgressText(`Memproses halaman ${update.page} / ${update.total} (${update.source === 'text_layer' ? 'Text Layer' : 'PaddleOCR'})`);
-        } else if (update.status === 'completed') {
-          setProgressPercent(100);
-          setProgressText('Pemrosesan PDF OCR selesai.');
-        } else if (update.status === 'error' && update.message) {
-          throw new Error(update.message);
-        }
-      });
+      const ocrResults = await processPdfOCR(
+        selectedFile, 
+        (update: PDFProgressUpdate) => {
+          if (update.status === 'start' && update.total_pages) {
+            setProgressText(`Mulai memproses. Total ${update.total_pages} halaman.`);
+            setProgressPercent(10);
+          } else if (update.status === 'progress' && update.page && update.total) {
+            const percent = Math.round((update.page / update.total) * 90) + 5;
+            setProgressPercent(percent);
+            setProgressText(`Memproses halaman ${update.page} / ${update.total} (${update.source === 'text_layer' ? 'Text Layer' : 'PaddleOCR'})`);
+          } else if (update.status === 'completed') {
+            setProgressPercent(100);
+            setProgressText('Pemrosesan PDF OCR selesai.');
+          } else if (update.status === 'error' && update.message) {
+            throw new Error(update.message);
+          }
+        },
+        lang,
+        abortControllerRef.current.signal
+      );
 
       setResults(ocrResults);
       setActivePage(1);
@@ -197,55 +170,51 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
   };
 
   const handleRemoveFile = () => {
-    setSelectedFile(null);
-    setResults([]);
-    setProgressPercent(0);
-    setProgressText('');
-    setErrorMsg(null);
+    const performRemove = () => {
+      setSelectedFile(null);
+      setResults([]);
+      setProgressPercent(0);
+      setProgressText('');
+      setErrorMsg(null);
+      setPageImgDims({});
+    };
+
+    if (results.length > 0) {
+      triggerConfirmation(
+        'Mulai Unggahan Baru',
+        'Apakah Anda yakin ingin menghapus berkas ini? Seluruh hasil ekstraksi teks dokumen ini akan hilang.',
+        performRemove
+      );
+    } else {
+      performRemove();
+    }
   };
 
-  // Download TXT (compiled text)
-  const handleDownloadTXT = () => {
+  const handleExport = async (format: 'txt' | 'json' | 'docx' | 'pdf' | 'zip') => {
     if (results.length === 0) return;
-
-    const compiledText = results.map(res => 
-      `--- Halaman ${res.page} ---\n${res.text}`
-    ).join('\n\n');
-
-    const blob = new Blob([compiledText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    
-    // Clean filename
-    const baseName = selectedFile ? selectedFile.name.replace(/\.[^/.]+$/, "") : "document";
-    link.href = url;
-    link.download = `${baseName}_extracted.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      setIsExportDropdownOpen(false);
+      onShowToast('Menyiapkan file ekspor...', 'info');
+      await exportOcrResults(selectedFile?.name || 'ocr_result.pdf', results, format);
+      onShowToast('Ekspor berhasil diunduh.', 'success');
+    } catch (err: any) {
+      onShowToast(err.message || 'Gagal mengekspor hasil.', 'error');
+    }
   };
 
-  // Download JSON (structured result structure)
-  const handleDownloadJSON = () => {
-    if (results.length === 0) return;
-
-    // Filter results to match requirements (excluding base64 preview image from download JSON to save space)
-    const cleanResults = results.map(res => ({
-      page: res.page,
-      source: res.source,
-      text: res.text,
-      blocks: res.blocks
-    }));
-
-    const jsonString = JSON.stringify(cleanResults, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-
-    const baseName = selectedFile ? selectedFile.name.replace(/\.[^/.]+$/, "") : "document";
-    link.href = url;
-    link.download = `${baseName}_extracted.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const handleUpdateBlocks = (updatedBlocks: any[]) => {
+    const updatedResults = results.map((page, idx) => {
+      if (idx === activePage - 1) {
+        const text = updatedBlocks.map((b) => b.text).join('\n');
+        return {
+          ...page,
+          blocks: updatedBlocks,
+          text: text
+        };
+      }
+      return page;
+    });
+    setResults(updatedResults);
   };
 
   return (
@@ -356,6 +325,22 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
                     >
                       Unggah Ulang
                     </button>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-neo-bg shadow-neo-pressed rounded-full border border-white/40 text-xs text-neo-text font-bold">
+                      <Languages className="w-3.5 h-3.5 text-indigo-500" />
+                      <select
+                        value={lang}
+                        onChange={(e) => setLang(e.target.value)}
+                        className="bg-transparent border-none text-xs text-neo-text font-bold focus:ring-0 focus:outline-none cursor-pointer pr-1"
+                      >
+                        <option value="auto">Auto Detect</option>
+                        <option value="id">Bahasa Indonesia</option>
+                        <option value="en">English</option>
+                        <option value="japan">日本語 (Japanese)</option>
+                        <option value="ch">中文 (Chinese)</option>
+                        <option value="korean">한국어 (Korean)</option>
+                        <option value="ar">العربية (Arabic)</option>
+                      </select>
+                    </div>
                     <button
                       onClick={handleStartOCR}
                       className="flex items-center gap-2 px-6 py-3.5 rounded-full bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-xs font-extrabold text-indigo-600 border border-white transition-all duration-200 hover:scale-[1.01] active:shadow-neo-pressed"
@@ -385,27 +370,59 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 relative">
               <button
-                onClick={handleDownloadTXT}
-                className="flex items-center gap-1.5 px-4 py-2 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-[11px] font-bold text-indigo-600 rounded-full border border-white transition-all duration-200"
+                onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-xs font-bold text-indigo-600 rounded-full border border-white transition-all duration-200"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Unduh TXT</span>
+                <span>Ekspor Hasil</span>
+                <ChevronDown className="w-3.5 h-3.5" />
               </button>
-              <button
-                onClick={handleDownloadJSON}
-                className="flex items-center gap-1.5 px-4 py-2 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-[11px] font-bold text-indigo-600 rounded-full border border-white transition-all duration-200"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Unduh JSON</span>
-              </button>
+              
+              {isExportDropdownOpen && (
+                <div className="absolute right-32 top-12 z-20 w-44 bg-neo-bg border border-white/60 rounded-neo shadow-neo-card p-1.5 flex flex-col gap-1 animate-scale-in">
+                  <button
+                    onClick={() => handleExport('txt')}
+                    className="w-full text-left px-3 py-1.5 rounded-full text-xs font-bold text-neo-text hover:bg-neo-shadow/15 transition-all text-indigo-600"
+                  >
+                    Text (.txt)
+                  </button>
+                  <button
+                    onClick={() => handleExport('json')}
+                    className="w-full text-left px-3 py-1.5 rounded-full text-xs font-bold text-neo-text hover:bg-neo-shadow/15 transition-all text-indigo-600"
+                  >
+                    JSON (.json)
+                  </button>
+                  <button
+                    onClick={() => handleExport('docx')}
+                    className="w-full text-left px-3 py-1.5 rounded-full text-xs font-bold text-neo-text hover:bg-neo-shadow/15 transition-all text-indigo-600"
+                  >
+                    Word (.docx)
+                  </button>
+                  <button
+                    onClick={() => handleExport('pdf')}
+                    className="w-full text-left px-3 py-1.5 rounded-full text-xs font-bold text-neo-text hover:bg-neo-shadow/15 transition-all text-indigo-600"
+                  >
+                    Searchable PDF (.pdf)
+                  </button>
+                  <button
+                    onClick={() => handleExport('zip')}
+                    className="w-full text-left px-3 py-1.5 rounded-full text-xs font-bold text-neo-text hover:bg-neo-shadow/15 transition-all text-indigo-600"
+                  >
+                    ZIP (Semua Format)
+                  </button>
+                </div>
+              )}
+
               <button
                 onClick={handleRemoveFile}
-                className="flex items-center gap-1.5 px-4.5 py-2 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-[11px] font-bold text-rose-500 rounded-full border border-white transition-all duration-200"
+                className="flex items-center gap-1.5 px-4.5 py-2.5 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-[11px] font-bold text-rose-500 rounded-full border border-white transition-all duration-200"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Mulai Baru</span>
               </button>
+            </div>
             </div>
           </div>
 
@@ -421,7 +438,6 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
               
               <div 
                 ref={leftScrollRef}
-                onScroll={handleLeftScroll}
                 className="h-[580px] overflow-y-auto pr-2 flex flex-col gap-6"
               >
                 {results.map((page) => (
@@ -454,10 +470,54 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
                     {page.preview_image ? (
                       <div className="w-full aspect-[4/3] bg-neo-bg rounded-neo border border-neo-shadow/20 shadow-neo-pressed overflow-hidden relative group">
                         <img 
+                          id={`pdf-page-img-${page.page}`}
                           src={page.preview_image} 
                           alt={`Page ${page.page}`}
                           className="w-full h-full object-contain p-1"
+                          onLoad={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            setPageImgDims(prev => ({
+                              ...prev,
+                              [page.page]: { width: target.naturalWidth, height: target.naturalHeight }
+                            }));
+                          }}
                         />
+                        
+                        {/* Interactive Bounding Box SVGs (Sync Highlight) */}
+                        {pageImgDims[page.page] && page.blocks && page.blocks.length > 0 && (
+                          <svg
+                            viewBox={`0 0 ${pageImgDims[page.page].width} ${pageImgDims[page.page].height}`}
+                            className="absolute top-0 left-0 w-full h-full pointer-events-none p-1"
+                            style={{ objectFit: 'contain' }}
+                          >
+                            {page.blocks.map((block, idx) => {
+                              if (!block.box || block.box.length < 4) return null;
+                              const pointsString = block.box.map((pt: any) => `${pt[0]},${pt[1]}`).join(' ');
+                              const isHovered = hoveredIndex === idx;
+                              const isSelected = selectedIndex === idx;
+                              const isActive = isHovered || isSelected;
+
+                              return (
+                                <polygon
+                                  key={idx}
+                                  points={pointsString}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedIndex(isSelected ? null : idx);
+                                  }}
+                                  onMouseEnter={() => setHoveredIndex(idx)}
+                                  onMouseLeave={() => setHoveredIndex(null)}
+                                  className={`transition-all duration-200 cursor-pointer pointer-events-auto ${
+                                    isActive
+                                      ? 'fill-indigo-600/35 stroke-indigo-600 stroke-[3.5px]'
+                                      : 'fill-indigo-500/5 stroke-indigo-500/35 stroke-[1px]'
+                                  }`}
+                                />
+                              );
+                            })}
+                          </svg>
+                        )}
+
                         {/* Zoom Action overlay */}
                         <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-200">
                           <button
@@ -465,7 +525,7 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
                               e.stopPropagation();
                               setFullscreenImage(page.preview_image);
                             }}
-                            className="p-2.5 bg-neo-bg text-indigo-600 rounded-full shadow-neo-btn border border-white hover:scale-105 transition-all duration-200"
+                            className="p-2.5 bg-neo-bg text-indigo-600 rounded-full shadow-neo-btn border border-white hover:scale-105 transition-all duration-200 pointer-events-auto"
                             title="Tampilan Penuh"
                           >
                             <Maximize2 className="w-4 h-4" />
@@ -483,48 +543,41 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
               </div>
             </div>
 
-            {/* Panel Kanan: Hasil Teks */}
+            {/* Panel Kanan: Hasil Teks (OcrEditor) */}
             <div className="lg:col-span-6 flex flex-col gap-4">
               <div className="px-1 flex justify-between items-center text-xs font-bold text-neo-muted">
-                <span>Hasil Ekstraksi Teks Halaman</span>
-                <span className="text-[10px]">Halaman Terpilih: {activePage}</span>
+                <span>Editor Hasil Ekstraksi Halaman</span>
+                <span className="text-[10px]">Halaman Terpilih: {activePage} / {results.length}</span>
               </div>
               
-              <div 
-                ref={rightScrollRef}
-                onScroll={handleRightScroll}
-                className="h-[580px] overflow-y-auto pr-2 flex flex-col gap-6"
-              >
-                {results.map((page) => (
-                  <div
-                    key={page.page}
-                    className={`p-4 bg-neo-bg rounded-neo border transition-all duration-300 flex flex-col gap-3 h-[290px] ${
-                      activePage === page.page 
-                        ? 'border-indigo-400 shadow-neo-pressed' 
-                        : 'border-white/50 shadow-neo-btn'
-                    }`}
-                  >
-                    {/* Panel Header */}
-                    <div className="flex justify-between items-center text-[10px] font-bold text-neo-muted border-b border-neo-shadow/15 pb-2">
-                      <span className={activePage === page.page ? 'text-indigo-600' : ''}>Halaman {page.page}</span>
-                      <span>{page.source === 'text_layer' ? 'Langsung' : 'OCR Scan'}</span>
-                    </div>
-
-                    {/* Text Container */}
-                    <textarea
-                      readOnly
-                      value={page.text}
-                      className="w-full h-full bg-transparent resize-none focus:outline-none text-[11px] text-neo-text leading-relaxed font-mono"
-                      placeholder="Tidak ada hasil teks pada halaman ini."
-                    />
-                  </div>
-                ))}
+              <div className="h-[580px] overflow-y-auto pr-2 flex flex-col gap-6 bg-neo-bg rounded-neo border border-white/50 shadow-neo-card p-4">
+                <OcrEditor
+                  blocks={results[activePage - 1]?.blocks || []}
+                  onChangeBlocks={handleUpdateBlocks}
+                  hoveredIndex={hoveredIndex}
+                  selectedIndex={selectedIndex}
+                  onSelectBlock={setSelectedIndex}
+                  onHoverBlock={setHoveredIndex}
+                  onShowToast={onShowToast}
+                />
               </div>
             </div>
 
           </div>
         </div>
       )}
+
+      {/* Confirmation Dialog Popup */}
+      <ConfirmationDialog
+        isOpen={isConfirmOpen}
+        title={confirmTitle}
+        message={confirmMsg}
+        onConfirm={() => {
+          setIsConfirmOpen(false);
+          if (confirmAction) confirmAction();
+        }}
+        onCancel={() => setIsConfirmOpen(false)}
+      />
 
       {/* Loading overlay during process */}
       {isProcessing && (

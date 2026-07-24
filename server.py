@@ -11,16 +11,19 @@ from __future__ import annotations
 import base64
 import logging
 import time
+import io
+import os
+import json
 from typing import Any, Optional
 
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile, Depends, Header
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config.settings import DEVICE, configure_logging, MAX_PDF_SIZE_MB
+from config.settings import DEVICE, configure_logging, MAX_PDF_SIZE_MB, OUTPUTS_DIR
 from core.image_processor import preprocess_image
 from core.ocr_engine import OCREngine
 from core.postprocessor import postprocess_results
@@ -205,6 +208,7 @@ async def get_user_history(current_user: Optional[dict] = Depends(get_current_us
 @app.post("/api/ocr-pdf")
 async def process_pdf_ocr(
     file: UploadFile = File(...),
+    lang: str = "id",
     current_user: Optional[dict] = Depends(get_current_user)
 ):
     """
@@ -238,7 +242,7 @@ async def process_pdf_ocr(
 
     from core.pdf_processor import process_pdf_generator
     return StreamingResponse(
-        process_pdf_generator(contents, filename, current_user["id"]),
+        process_pdf_generator(contents, filename, current_user["id"], lang=lang),
         media_type="application/x-ndjson"
     )
 
@@ -246,6 +250,7 @@ async def process_pdf_ocr(
 @app.post("/api/ocr", response_model=OCRResponse)
 async def process_ocr(
     image: UploadFile = File(...),
+    lang: str = "id",
     authorization: Optional[str] = Header(None)
 ) -> OCRResponse:
     """
@@ -287,7 +292,21 @@ async def process_ocr(
         
         # 2. OCR Inference
         engine = OCREngine.get_instance()
-        raw_results = engine.recognize(processed)
+        
+        # Auto detect language on scanned image
+        target_lang = lang
+        if target_lang == "auto":
+            target_lang = "id"
+            raw_results = engine.recognize(processed, lang=target_lang)
+            first_page_text = " ".join([r.text for r in raw_results])
+            from core.lang_detector import detect_language_from_text
+            detected = detect_language_from_text(first_page_text, default_lang="id")
+            if detected != target_lang:
+                logger.info("Auto-detected scanned image language as %s. Re-running OCR...", detected)
+                target_lang = detected
+                raw_results = engine.recognize(processed, lang=target_lang)
+        else:
+            raw_results = engine.recognize(processed, lang=target_lang)
         
         # 3. Postprocess
         results = postprocess_results(raw_results)
@@ -367,6 +386,95 @@ async def process_ocr(
         raise HTTPException(
             status_code=500, detail=f"OCR processing pipeline failed: {exc}"
         ) from exc
+
+
+class ExportRequest(BaseModel):
+    filename: str
+    results: Any
+    format: str
+
+@app.post("/api/ocr/export")
+async def export_ocr_results(payload: ExportRequest):
+    filename = payload.filename
+    results = payload.results
+    export_format = payload.format.lower()
+    
+    base_filename = os.path.splitext(filename)[0]
+    
+    # Generate text representation
+    text_content = ""
+    if isinstance(results, list):
+        for page in results:
+            page_num = page.get("page", 1)
+            text_content += f"--- Halaman {page_num} ---\n"
+            text_content += page.get("text", "") + "\n\n"
+    elif isinstance(results, dict):
+        text_regions = results.get("text_regions", [])
+        text_content = "\n".join(r.get("text", "") for r in text_regions)
+        
+    if export_format == "txt":
+        return StreamingResponse(
+            io.BytesIO(text_content.encode("utf-8")),
+            media_type="text/plain",
+            headers={"Content-Disposition": f"attachment; filename={base_filename}.txt"}
+        )
+        
+    elif export_format == "json":
+        json_bytes = json.dumps(results, indent=2, ensure_ascii=False).encode("utf-8")
+        return StreamingResponse(
+            io.BytesIO(json_bytes),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename={base_filename}.json"}
+        )
+        
+    elif export_format == "docx":
+        from core.exporter import generate_docx_bytes
+        docx_bytes = generate_docx_bytes(results)
+        return StreamingResponse(
+            io.BytesIO(docx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f"attachment; filename={base_filename}.docx"}
+        )
+        
+    elif export_format == "pdf":
+        pdf_path = OUTPUTS_DIR / f"{base_filename}_searchable.pdf"
+        if not pdf_path.exists():
+            raise HTTPException(status_code=404, detail="Berkas Searchable PDF tidak ditemukan untuk dokumen ini.")
+            
+        return FileResponse(
+            pdf_path,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={base_filename}_searchable.pdf"}
+        )
+        
+    elif export_format == "zip":
+        from core.exporter import generate_docx_bytes, generate_zip_bytes
+        docx_bytes = generate_docx_bytes(results)
+        
+        pdf_path = OUTPUTS_DIR / f"{base_filename}_searchable.pdf"
+        pdf_bytes = None
+        if pdf_path.exists():
+            try:
+                with open(pdf_path, "rb") as f:
+                    pdf_bytes = f.read()
+            except Exception as e:
+                logger.error("Failed to read searchable PDF for ZIP: %s", e)
+                
+        zip_bytes = generate_zip_bytes(
+            filename=filename,
+            text_content=text_content,
+            json_data=results,
+            docx_bytes=docx_bytes,
+            pdf_bytes=pdf_bytes
+        )
+        return StreamingResponse(
+            io.BytesIO(zip_bytes),
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={base_filename}_all_formats.zip"}
+        )
+        
+    else:
+        raise HTTPException(status_code=400, detail="Format ekspor tidak didukung.")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Trash2, RefreshCw, FileText, HardDrive, Maximize2 } from 'lucide-react';
+import { Play, Trash2, RefreshCw, FileText, HardDrive, Maximize2, Languages } from 'lucide-react';
 
 interface ImagePreviewProps {
   file: File;
@@ -7,6 +7,8 @@ interface ImagePreviewProps {
   onRemove: () => void;
   onChangeImage: () => void;
   processing?: boolean;
+  lang: string;
+  onChangeLang: (lang: string) => void;
 }
 
 export const ImagePreview: React.FC<ImagePreviewProps> = ({
@@ -15,6 +17,8 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   onRemove,
   onChangeImage,
   processing = false,
+  lang,
+  onChangeLang,
 }) => {
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const [resolution, setResolution] = useState<string>('Memuat...');
@@ -101,14 +105,33 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
           </button>
         </div>
 
-        <button
-          onClick={onProcess}
-          disabled={processing}
-          className="flex items-center gap-2 px-6 py-3 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover rounded-full text-sm font-bold text-indigo-600 border border-white transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none"
-        >
-          <Play className="w-4 h-4 text-indigo-600" />
-          <span>{processing ? 'Memproses...' : 'Proses OCR'}</span>
-        </button>
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex items-center gap-2 px-4 py-2 bg-neo-bg shadow-neo-pressed rounded-full border border-white/40 text-xs text-neo-text font-bold">
+            <Languages className="w-3.5 h-3.5 text-indigo-500" />
+            <select
+              value={lang}
+              onChange={(e) => onChangeLang(e.target.value)}
+              className="bg-transparent border-none text-xs text-neo-text font-bold focus:ring-0 focus:outline-none cursor-pointer pr-1"
+            >
+              <option value="auto">Auto Detect</option>
+              <option value="id">Bahasa Indonesia</option>
+              <option value="en">English</option>
+              <option value="japan">日本語 (Japanese)</option>
+              <option value="ch">中文 (Chinese)</option>
+              <option value="korean">한국어 (Korean)</option>
+              <option value="ar">العربية (Arabic)</option>
+            </select>
+          </div>
+
+          <button
+            onClick={onProcess}
+            disabled={processing}
+            className="flex items-center gap-2 px-6 py-2.5 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover rounded-full text-xs font-bold text-indigo-600 border border-white transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none"
+          >
+            <Play className="w-3.5 h-3.5 text-indigo-600" />
+            <span>{processing ? 'Memproses...' : 'Proses OCR'}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

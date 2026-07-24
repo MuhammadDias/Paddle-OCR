@@ -46,22 +46,19 @@ class OCREngine:
 
     def __init__(self, config: OCRConfig | None = None) -> None:
         """
-        Initialize the OCR engine and build the underlying PaddleOCR pipeline.
-
-        Args:
-            config: OCR configuration to use. Defaults to
-                config.settings.OCR_CONFIG.
-
-        Raises:
-            RuntimeError: if the `paddleocr` package is not installed, or if
-                the underlying pipeline fails to initialize (e.g. missing
-                model weights and no network access to download them).
+        Initialize the OCR engine.
         """
         self.config = config or OCR_CONFIG
-        self._pipeline = self._build_pipeline()
+        self._pipelines: dict[str, Any] = {}
 
-    def _build_pipeline(self) -> Any:
-        """Construct the underlying PaddleOCR pipeline object."""
+    def _get_pipeline(self, lang: str) -> Any:
+        """Retrieve or build a cached pipeline for a specific language."""
+        if lang not in self._pipelines:
+            self._pipelines[lang] = self._build_pipeline(lang)
+        return self._pipelines[lang]
+
+    def _build_pipeline(self, lang: str) -> Any:
+        """Construct the underlying PaddleOCR pipeline object for a language."""
         try:
             from paddleocr import PaddleOCR
         except ImportError as exc:
@@ -73,11 +70,11 @@ class OCREngine:
         device = "gpu" if self.config.use_gpu else "cpu"
         logger.info(
             "Initializing PaddleOCR pipeline (lang=%s, device=%s)...",
-            self.config.lang, device,
+            lang, device,
         )
         try:
             init_kwargs: dict[str, Any] = dict(
-                lang=self.config.lang,
+                lang=lang,
                 use_textline_orientation=self.config.use_textline_orientation,
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,
@@ -96,7 +93,7 @@ class OCREngine:
                 f"install. Original error: {exc}"
             ) from exc
 
-        logger.info("PaddleOCR pipeline ready.")
+        logger.info("PaddleOCR pipeline ready for lang=%s.", lang)
         return pipeline
 
     @classmethod
@@ -115,25 +112,22 @@ class OCREngine:
             cls._instance = cls(config)
         return cls._instance
 
-    def recognize(self, image: np.ndarray) -> list[OCRResult]:
+    def recognize(self, image: np.ndarray, lang: str | None = None) -> list[OCRResult]:
         """
         Run detection + angle classification + recognition on one image.
 
         Args:
             image: a preprocessed BGR image (as produced by
                 core.image_processor.preprocess_image).
+            lang: language model to use (e.g. 'id', 'en', 'japan', etc.)
 
         Returns:
-            list[OCRResult]: one entry per detected text line. Order is
-            whatever the pipeline returns; use
-            core.postprocessor.reconstruct_reading_order for a
-            human-reading-order sequence.
-
-        Raises:
-            RuntimeError: if the underlying pipeline call fails.
+            list[OCRResult]: one entry per detected text line.
         """
+        target_lang = lang or self.config.lang
+        pipeline = self._get_pipeline(target_lang)
         try:
-            raw_results = self._pipeline.predict(
+            raw_results = pipeline.predict(
                 image, text_rec_score_thresh=self.config.drop_score
             )
         except Exception as exc:  # noqa: BLE001 - convert to a domain error

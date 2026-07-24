@@ -1,131 +1,66 @@
-"""
-Exporting OCR results to disk.
-
-Responsibilities:
-    - Export results to a plain-text (.txt) file preserving reading order.
-    - Export results to a structured JSON file with schema:
-          {"text": ..., "confidence": ..., "bounding_box": [...], "page": ...}
-"""
-
-from __future__ import annotations
-
+import io
 import json
 import logging
-from pathlib import Path
-from typing import Union
-
-from core.utils import OCRResult
+import zipfile
+from docx import Document
 
 logger = logging.getLogger("ai_ocr_system.exporter")
 
-PathLike = Union[str, Path]
-
-
-def results_to_records(results: list[OCRResult], page: int = 1) -> list[dict]:
+def generate_docx_bytes(results: list[dict] | dict) -> bytes:
     """
-    Convert OCRResult objects into plain JSON-serializable dict records.
-
-    Args:
-        results: OCR results, ideally already in reading order.
-        page: page number to attach to each record (for multi-page/batch
-            exports where results are combined later).
-
-    Returns:
-        list[dict]: records shaped as
-            {"text": str, "confidence": float, "bounding_box": [[x,y], ...], "page": int}
+    Generates a DOCX file from OCR results.
+    Works for both image OCR results (dict) and PDF page results (list of dicts).
     """
-    return [
-        {
-            "text": result.text,
-            "confidence": round(result.confidence, 4),
-            "bounding_box": result.box,
-            "page": page,
-        }
-        for result in results
-    ]
-
-
-def export_to_txt(results: list[OCRResult], output_path: PathLike) -> Path:
-    """
-    Export OCR results to a plain-text file, one line per result, in the
-    order given (should already be reading order).
-
-    Args:
-        results: OCR results to export.
-        output_path: destination .txt file path. Parent directories are
-            created automatically.
-
-    Returns:
-        Path: the resolved output path.
-    """
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    content = "\n".join(result.text for result in results)
-    output_path.write_text(content, encoding="utf-8")
-    logger.info("Exported TXT: %s (%d lines)", output_path, len(results))
-    return output_path
-
-
-def export_to_json(
-    results: list[OCRResult], output_path: PathLike, page: int = 1
-) -> Path:
-    """
-    Export OCR results to a structured JSON file.
-
-    Args:
-        results: OCR results to export.
-        output_path: destination .json file path. Parent directories are
-            created automatically.
-        page: page number attached to every record.
-
-    Returns:
-        Path: the resolved output path.
-    """
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    records = results_to_records(results, page=page)
-    output_path.write_text(
-        json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    logger.info("Exported JSON: %s (%d records)", output_path, len(records))
-    return output_path
-
-
-def export_results(
-    results: list[OCRResult],
-    output_dir: PathLike,
-    base_name: str,
-    formats: tuple[str, ...] = ("txt", "json"),
-    page: int = 1,
-) -> dict[str, Path]:
-    """
-    Export OCR results to one or more formats in a single call.
-
-    Args:
-        results: OCR results to export.
-        output_dir: destination directory. Created automatically if missing.
-        base_name: filename stem used for every exported file
-            (e.g. "invoice" -> "invoice.txt", "invoice.json").
-        formats: which formats to export; any subset of ("txt", "json").
-        page: page number attached to JSON records.
-
-    Returns:
-        dict[str, Path]: mapping of format name to the file path written.
-
-    Raises:
-        ValueError: if `formats` contains an unsupported value.
-    """
-    output_dir = Path(output_dir)
-    exported: dict[str, Path] = {}
-
-    for fmt in formats:
-        if fmt == "txt":
-            exported["txt"] = export_to_txt(results, output_dir / f"{base_name}.txt")
-        elif fmt == "json":
-            exported["json"] = export_to_json(
-                results, output_dir / f"{base_name}.json", page=page
-            )
+    doc = Document()
+    doc.add_heading("Hasil Ekstraksi OCR", 0)
+    
+    if isinstance(results, list):
+        # PDF OCR results
+        for page_data in results:
+            page_num = page_data.get("page", 1)
+            doc.add_heading(f"Halaman {page_num}", level=1)
+            
+            text = page_data.get("text", "")
+            if text:
+                for line in text.split("\n"):
+                    doc.add_paragraph(line)
+            else:
+                doc.add_paragraph("[Tidak ada teks terdeteksi di halaman ini]")
+    else:
+        # Image OCR results (single page)
+        doc.add_heading("Hasil Ekstraksi Gambar", level=1)
+        text_regions = results.get("text_regions", [])
+        if text_regions:
+            for region in text_regions:
+                doc.add_paragraph(region.get("text", ""))
         else:
-            raise ValueError(f"Unsupported export format: {fmt!r}. Use 'txt' or 'json'.")
+            doc.add_paragraph("[Tidak ada teks terdeteksi]")
 
-    return exported
+    file_stream = io.BytesIO()
+    doc.save(file_stream)
+    return file_stream.getvalue()
+
+
+def generate_zip_bytes(filename: str, text_content: str, json_data: dict, docx_bytes: bytes, pdf_bytes: bytes | None = None) -> bytes:
+    """
+    Creates a ZIP archive containing TXT, JSON, DOCX, and optionally the Searchable PDF.
+    """
+    zip_buffer = io.BytesIO()
+    base_name = filename.rsplit(".", 1)[0]
+    
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        # 1. Add TXT file
+        zip_file.writestr(f"{base_name}.txt", text_content)
+        
+        # 2. Add JSON file
+        json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
+        zip_file.writestr(f"{base_name}.json", json_str)
+        
+        # 3. Add DOCX file
+        zip_file.writestr(f"{base_name}.docx", docx_bytes)
+        
+        # 4. Add Searchable PDF if available
+        if pdf_bytes:
+            zip_file.writestr(f"{base_name}_searchable.pdf", pdf_bytes)
+            
+    return zip_buffer.getvalue()
