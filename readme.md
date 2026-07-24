@@ -1,179 +1,212 @@
-# ai-ocr-system
+# AI-Powered Full-Stack OCR System
 
-Sistem OCR (*Optical Character Recognition*) modular berbasis Python, dibangun dari nol dengan **OpenCV** untuk *image enhancement* dan **PaddleOCR** (versi terbaru, arsitektur PaddleX) untuk deteksi, klasifikasi sudut, dan pengenalan teks. Ditargetkan untuk hasil yang mendekati akurasi Google Lens pada berbagai jenis gambar, dalam Bahasa Indonesia maupun Inggris.
+A high-performance, modular, and premium full-stack Optical Character Recognition (OCR) web application. The backend is powered by **FastAPI**, **OpenCV** (adaptive image preprocessing), and **PaddleOCR** (latest version with PaddleX architecture). The frontend is a modern **React + TypeScript + Vite** single-page application (SPA) styled with **Neomorphic UI principles**.
 
-> **Catatan Penting:** Sistem ini **tidak menggunakan Tesseract** sama sekali.
-
----
-
-## Fitur
-
-* **Dukungan Berbagai Media** — Mendukung dokumen, sertifikat, buku, KTP, screenshot WhatsApp/website, poster, banner, papan nama, kemasan produk, brosur, dan teks pada kamera secara real-time.
-* **Preprocessing Adaptif** — Sistem otomatis mengklasifikasikan gambar (`document` / `screenshot` / `camera` / `outdoor`) dan hanya menerapkan *enhancement* yang relevan, bukan preprocessing seragam yang berlebihan.
-* **Pipeline OCR Lengkap** — Deteksi teks → klasifikasi sudut → pengenalan teks → rekonstruksi urutan baca alami.
-* **Akselerasi GPU** — Otomatis memakai GPU jika tersedia, fallback ke CPU jika tidak.
-* **Visualisasi Kaya** — Visualisasi *bounding box*, *confidence score*, teks hasil OCR, dan FPS (pada mode realtime).
-* **Ekspor Fleksibel** — Menyimpan hasil ke format TXT dan JSON.
-* **Logging Lengkap** — Log aktivitas untuk debugging, baik ke console maupun ke file (`logs/ai_ocr_system.log`).
-* **Kode Bersih** — Menggunakan type hints, docstring di setiap fungsi, menerapkan prinsip *single responsibility*, tanpa API yang deprecated.
+This system operates **without Tesseract** and is designed to provide Google Lens-like reading order accuracy, entity extraction, and multi-language support.
 
 ---
 
-## Struktur Folder
-
-```directory
-ai-ocr-system/
-│
-├── app.py                   # Entry point CLI — parsing argumen & orkestrasi pipeline
-├── requirements.txt         # Daftar dependency
-├── readme.md                # Dokumentasi Proyek
-│
-├── assets/
-│   ├── images/              # Tempat menaruh gambar input (opsional, untuk --folder)
-│   └── outputs/             # Gambar hasil anotasi (bounding box) disimpan di sini
-│
-├── config/
-│   └── settings.py          # Konfigurasi terpusat: path, OCR, device, preprocessing profiles, logging
-│
-├── core/
-│   ├── image_loader.py      # Load & validasi gambar/folder/kamera/video
-│   ├── image_processor.py   # Preprocessing adaptif berbasis OpenCV
-│   ├── ocr_engine.py        # Wrapper PaddleOCR (deteksi + angle cls + recognition)
-│   ├── postprocessor.py     # Pembersihan teks & rekonstruksi urutan baca
-│   ├── visualizer.py        # Menggambar bounding box, teks, confidence, FPS
-│   ├── exporter.py          # Ekspor hasil ke TXT / JSON
-│   ├── realtime.py          # Loop OCR real-time untuk kamera/video
-│   └── utils.py             # OCRResult, FPSCounter, helper bersama
-│
-└── outputs/                 # Hasil ekspor TXT/JSON disimpan di sini
-```
-
----
-
-## Teknologi yang Digunakan
-
-| Komponen | Teknologi | Keterangan |
-| :--- | :--- | :--- |
-| **Bahasa Utama** | ![Python](https://img.shields.io/badge/Python-3-3776AB?style=flat-square&logo=python&logoColor=white) | Python 3 |
-| **Image Processing** | ![OpenCV](https://img.shields.io/badge/OpenCV-4-5C3EE8?style=flat-square&logo=opencv&logoColor=white) | OpenCV |
-| **OCR Engine** | ![PaddleOCR](https://img.shields.io/badge/PaddleOCR-Latest-orange?style=flat-square) | PaddleOCR (versi terbaru, arsitektur PaddleX-based) |
-| **Numerik** | ![NumPy](https://img.shields.io/badge/NumPy-Latest-013243?style=flat-square&logo=numpy&logoColor=white) | NumPy |
-| **Image I/O** | ![Pillow](https://img.shields.io/badge/Pillow-Latest-lightgrey?style=flat-square) | Pillow |
-| **Deep Learning Backend** | ![PaddlePaddle](https://img.shields.io/badge/PaddlePaddle-CPU%2FGPU-red?style=flat-square) | PaddlePaddle (CPU/GPU) |
-
----
-
-## Instalasi
-
-1. **Clone / salin folder project ini**, lalu masuk ke direktorinya:
-   ```bash
-   cd ai-ocr-system
-   ```
-
-2. **(Disarankan) buat virtual environment:**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate      # Linux/Mac
-   venv\Scripts\activate         # Windows
-   ```
-
-3. **Install PaddlePaddle** sesuai hardware kamu (pilih salah satu):
-   * **CPU only:**
-     ```bash
-     pip install paddlepaddle
-     ```
-   * **GPU (NVIDIA, sesuaikan versi CUDA di panduan resmi PaddlePaddle):**
-     ```bash
-     pip install paddlepaddle-gpu
-     ```
-
-4. **Install dependency lainnya:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-> **Info:** Saat pertama kali dijalankan, PaddleOCR akan otomatis mengunduh model (deteksi, klasifikasi sudut, recognition) dari server resminya. Pastikan ada koneksi internet pada run pertama.
-
----
-
-## Cara Menjalankan
-
-### **OCR pada satu gambar:**
-```bash
-python app.py --image image.jpg
-```
-
-### **OCR batch pada seluruh gambar dalam folder:**
-```bash
-python app.py --folder assets/images
-```
-
-### **OCR real-time dari kamera:**
-```bash
-python app.py --camera
-```
-> **Catatan:** Tekan `q` untuk keluar, `s` untuk menyimpan snapshot hasil OCR saat ini.
-
-### **OCR pada file video (frame-by-frame):**
-```bash
-python app.py --video video.mp4
-```
-
-### **Pilih format ekspor** (default: `both`):
-```bash
-python app.py --image image.jpg --export json
-python app.py --image image.jpg --export txt
-python app.py --image image.jpg --export both
-```
-
----
-
-## Output yang Dihasilkan
-
-* Gambar teranotasi (bounding box + teks + confidence) → `assets/outputs/<nama_file>_annotated.jpg`
-* Hasil ekspor teks → `outputs/<nama_file>.txt`
-* Hasil ekspor JSON, dengan skema:
-  ```json
-  {
-    "text": "...",
-    "confidence": 0.98,
-    "bounding_box": [[x1, y1], [x2, y2], [x3, y3], [x4, y4]],
-    "page": 1
-  }
-  ```
-
----
-
-## Contoh Hasil
-
-Setelah menjalankan `python app.py --image contoh.jpg --export both`, kamu akan mendapatkan:
-
-1. **`assets/outputs/contoh_annotated.jpg`** — Gambar asli dengan kotak hijau di setiap teks terdeteksi, plus label teks & confidence score di atasnya.
-2. **`outputs/contoh.txt`** — Isi teks hasil OCR, satu baris per baris teks, sesuai urutan baca alami (atas ke bawah, kiri ke kanan).
-3. **`outputs/contoh.json`** — Daftar record terstruktur per baris teks, siap diproses lebih lanjut oleh sistem lain.
-
----
-
-## Catatan Arsitektur
-
-Pipeline mengikuti alur berikut, dengan setiap tahap sebagai modul terpisah di `core/` (*Single Responsibility Principle*):
+## Architecture Workflow
 
 ```mermaid
 flowchart TD
-    Input[Image Input] --> Validation[Image Validation<br/><i>core/image_loader.py</i>]
-    Validation --> Enhancement[Image Enhancement<br/><i>core/image_processor.py — adaptif per kategori gambar</i>]
-    Enhancement --> OCR[Text Detection + Angle Classification + Text Recognition<br/><i>core/ocr_engine.py</i>]
-    OCR --> PostProcess[Reading Order Reconstruction + Cleanup<br/><i>core/postprocessor.py</i>]
-    PostProcess --> Visual[Visualization<br/><i>core/visualizer.py</i>]
-    Visual --> Export[Export Result<br/><i>core/exporter.py</i>]
+    SPA[React SPA Frontend<br/><i>Vite / TS / Neomorphic</i>] <-->|REST API / NDJSON Stream| Server[FastAPI Backend Server<br/><i>server.py</i>]
+    Server <--> DB[(SQLite Database<br/><i>User Auth & OCR History</i>)]
+    Server -->|Dynamic Loading & Caching| Engine[Multi-Lang OCR Engine<br/><i>core/ocr_engine.py</i>]
+    
+    %% Document PDF pipeline
+    PDF[Uploaded PDF File] --> PDFProc[PDF Processor<br/><i>core/pdf_processor.py</i>]
+    PDFProc -->|Native Text Layer| TextLayer[Direct Text Extraction]
+    PDFProc -->|No Text Layer| OCRFall[OCR Fallback Pipeline]
+    
+    OCRFall --> ImageEnh[Adaptive OpenCV Enhancement<br/><i>core/image_processor.py</i>]
+    ImageEnh --> Engine
+    Engine --> Post[Spatial Read-Order Reconstruction<br/><i>core/postprocessor.py</i>]
+    
+    TextLayer --> Assembly[Progress NDJSON Yield]
+    Post --> Assembly
+    Assembly --> Server
+    
+    %% Exporter
+    Server --> Export[Exporter Utility<br/><i>core/exporter.py</i>]
+    Export -->|Downloads| SPA
 
     classDef default fill:#f9f9fb,stroke:#d1d5db,stroke-width:1px;
-    classDef startEnd fill:#eff6ff,stroke:#3b82f6,stroke-width:2px;
-    class Input,Export startEnd;
+    classDef spa fill:#eff6ff,stroke:#3b82f6,stroke-width:2px;
+    classDef server fill:#f5f3ff,stroke:#8b5cf6,stroke-width:2px;
+    classDef database fill:#ecfdf5,stroke:#10b981,stroke-width:2px;
+    class SPA spa;
+    class Server server;
+    class DB database;
 ```
-
-Untuk mode `--camera` dan `--video`, alur yang sama dijalankan berulang per frame oleh `core/realtime.py`, dengan sampling (OCR tidak dijalankan di setiap frame) agar FPS tetap wajar.
 
 ---
 
-# Paddle-OCR
+## Key Features
+
+### 🌟 Premium Web Workspace
+* **Image OCR Workspace**: Drop files to view live visual bounding boxes, hover or click to sync highlights, and copy single lines or extract smart entities (currency, phone numbers, emails, web links).
+* **PDF OCR Pipeline**: High-speed, page-by-page processing of multi-page documents. 
+  * Checks if pages contain a native text layer to extract text directly (instant results).
+  * Automatically falls back to high-resolution image rendering (150 DPI) + PaddleOCR if the page is scanned.
+  * Streams real-time progress updates via Line-delimited JSON (NDJSON).
+* **PDF Page Zoom Viewer**: Click page thumbnails to view page previews in fullscreen. Supports touchscreen pinch-to-zoom and drag-to-pan navigation on mobile.
+
+### 📝 Interactive OCR Editor
+* **Rich Line-by-Line Editor**: Edit every single word or line recognized by the system.
+* **Undo & Redo History**: Complete state stack to roll back or re-apply modifications.
+* **Find & Replace**: Search using case-sensitivity filters and perform single or batch replacements ("Replace All").
+* **Auto-Save Indicators**: Dynamic neomorphic status display showing active saving (using a 2-second debounce).
+* **Dual-Direction Highlight Synchronization**:
+  * Click on text inside the editor $\rightarrow$ Highlights the corresponding bounding box coordinates in the visual preview.
+  * Click on any bounding box in the preview $\rightarrow$ Highlights and scrolls to the corresponding line inside the editor panel.
+
+### 🌐 Multi-Language Support
+* **Auto-Language Detection**: Uses `langdetect` to examine document text samples and match the most appropriate model dynamically.
+* **PaddleOCR Model Caching**: Prevents model reload delays (3–5s) by keeping multi-language models loaded in a cached pipeline dictionary (`self._pipelines`) on the server.
+* **Languages Supported**: Auto Detect, Indonesian, English, Japanese, Chinese, Korean, and Arabic.
+
+### 📂 Advanced Multi-Format Exporting
+* **Searchable PDF**: Injects an invisible text layer on top of scanned PDF pages at standard 72 DPI resolution, matching the visual layout perfectly.
+* **Microsoft Word (.docx)**: Compiles formatted paragraphs and reading order alignments natively via `python-docx`.
+* **JSON Output**: Fully structured results containing raw text, confidence coordinates, and detected entities.
+* **ZIP Archive**: Generates and compresses all formats (TXT, JSON, DOCX, Searchable PDF) into a single archive in memory on the fly.
+* **Consistent Syncing**: Exported files are generated dynamically based on active edits in the editor.
+
+### 🔒 User Accounts & History Drawer
+* **Authentication**: Password registration and secure authentication using SHA-256 password hashing.
+* **OCR History Log**: Saves processed file metadata and coordinates to a SQLite database (`ocr_system.db`) under `is_pdf: true/false`. Reload files instantly from the history drawer without running OCR again.
+
+---
+
+## Directory Layout
+
+```directory
+paddle-ocr/
+│
+├── server.py                # FastAPI server (Endpoints, Auth, History, SQLite schemas)
+├── app.py                   # Legacy CLI entrypoint
+├── requirements.txt         # Python dependencies
+├── ocr_system.db            # SQLite database file
+│
+├── config/
+│   └── settings.py          # Centralized configuration (sizes, directories, log schemas)
+│
+├── core/
+│   ├── ocr_engine.py        # Multi-language Cached PaddleOCR Engine wrapper
+│   ├── pdf_processor.py     # PyMuPDF pipelines, NDJSON generator, & searchable PDF compiler
+│   ├── lang_detector.py     # langdetect language classification wrapper
+│   ├── image_processor.py   # OpenCV-based adaptive preprocessing enhancement
+│   ├── image_loader.py      # Input loaders and validation
+│   ├── exporter.py          # Word (DOCX) and ZIP compilation
+│   ├── postprocessor.py     # Natural read-order reconstruction
+│   ├── visualizer.py        # Bounding box drawing overlays
+│   └── utils.py             # Shared types & FPS calculators
+│
+├── frontend/                # Vite React + TypeScript Single Page Application
+│   ├── src/
+│   │   ├── components/      # Neomorphic UI elements (OcrEditor, ConfirmationDialog, PDFPageZoomViewer, HistoryDrawer)
+│   │   ├── services/
+│   │   │   └── api.ts       # Fetch API client and blob exporters
+│   │   ├── App.tsx          # Main application workspace routing
+│   │   └── main.tsx         # Bootstrapper
+│   ├── package.json
+│   └── vite.config.ts
+```
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+* Python 3.8+
+* Node.js 16+
+
+### 1. Clone & Setup Python Environment
+1. Enter the repository root directory:
+   ```bash
+   cd paddle-ocr
+   ```
+2. Create and activate a Python virtual environment:
+   ```bash
+   python -m venv venv
+   # On macOS/Linux:
+   source venv/bin/activate
+   # On Windows:
+   venv\Scripts\activate
+   ```
+
+### 2. Install Python Dependencies
+1. Install PaddlePaddle (depending on your hardware):
+   * **CPU only**:
+     ```bash
+     pip install paddlepaddle
+     ```
+   * **GPU (NVIDIA CUDA)**: Refer to the official [PaddlePaddle Installation Guide](https://www.paddlepaddle.org.cn/install/quick?docurl=/documentation/docs/en/install/pip/windows-pip_en.html) to choose the correct cuda packages.
+2. Install remaining requirements:
+     ```bash
+     pip install -r requirements.txt
+     ```
+
+### 3. Setup Frontend
+1. Navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+2. Install package dependencies:
+   ```bash
+   npm install
+   ```
+
+---
+
+## Running the Application
+
+### Running in Development
+
+1. **Start FastAPI Backend**:
+   Activate virtual environment and launch FastAPI:
+   ```bash
+   # From project root
+   python server.py
+   ```
+   The backend server will run on `http://127.0.0.1:8000`.
+
+2. **Start Frontend Dev Server**:
+   ```bash
+   # From frontend directory
+   npm run dev
+   ```
+   Open `http://localhost:5173` in your browser.
+
+### Running in Production (Static Build)
+
+To host the application directly from the FastAPI server:
+1. Build the production assets in the frontend directory:
+   ```bash
+   npm run build
+   ```
+   This compiles static assets into `frontend/dist`.
+2. Start the python server:
+   ```bash
+   python server.py
+   ```
+   The backend FastAPI server will automatically mount `frontend/dist` and serve the entire full-stack app directly from `http://127.0.0.1:8000`.
+
+---
+
+## API Documentation
+
+### Authentication Endpoints
+* **`POST /api/auth/register`**: Registers a new user. Accepts JSON body containing `email` and `password`.
+* **`POST /api/auth/login`**: Authenticates user credentials and returns a JWT Bearer token.
+* **`GET /api/auth/me`**: Returns the active authenticated user profile details.
+
+### OCR & PDF Processing Endpoints
+* **`POST /api/ocr`**: Analyzes single image inputs. Optional query parameter `lang` (default `id`).
+* **`POST /api/ocr-pdf`**: Standard NDJSON streaming endpoint for processing documents. Receives `file`, query parameters `lang`, and streams line-delimited progress metrics.
+* **`POST /api/ocr/export`**: Receives coordinates text arrays and formats dynamic exports (TXT, JSON, DOCX, Searchable PDF, or ZIP).
+
+### History Log Endpoints
+* **`GET /api/history`**: Retrieves all database logs associated with the active user.
+* **`DELETE /api/history/{id}`**: Permanently deletes a specific entry from the history log.
