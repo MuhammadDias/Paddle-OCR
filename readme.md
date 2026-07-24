@@ -1,25 +1,25 @@
-# 🔍 AI OCR System
+# ai-ocr-system
 
 Sistem OCR (*Optical Character Recognition*) modular berbasis Python, dibangun dari nol dengan **OpenCV** untuk *image enhancement* dan **PaddleOCR** (versi terbaru, arsitektur PaddleX) untuk deteksi, klasifikasi sudut, dan pengenalan teks. Ditargetkan untuk hasil yang mendekati akurasi Google Lens pada berbagai jenis gambar, dalam Bahasa Indonesia maupun Inggris.
 
-> ⚠️ **Catatan Penting:** Sistem ini **tidak menggunakan Tesseract** sama sekali.
+> **Catatan Penting:** Sistem ini **tidak menggunakan Tesseract** sama sekali.
 
 ---
 
-## ✨ Fitur
+## Fitur
 
-* 📱 **Dukungan Berbagai Media** — Mendukung dokumen, sertifikat, buku, KTP, screenshot WhatsApp/website, poster, banner, papan nama, kemasan produk, brosur, dan teks pada kamera secara real-time.
-* ⚙️ **Preprocessing Adaptif** — Sistem otomatis mengklasifikasikan gambar (`document` / `screenshot` / `camera` / `outdoor`) dan hanya menerapkan *enhancement* yang relevan, bukan preprocessing seragam yang berlebihan.
-* 🔄 **Pipeline OCR Lengkap** — Deteksi teks → klasifikasi sudut → pengenalan teks → rekonstruksi urutan baca alami.
-* ⚡ **Akselerasi GPU** — Otomatis memakai GPU jika tersedia, fallback ke CPU jika tidak.
-* 🎨 **Visualisasi Kaya** — Visualisasi *bounding box*, *confidence score*, teks hasil OCR, dan FPS (pada mode realtime).
-* 📂 **Ekspor Fleksibel** — Menyimpan hasil ke format TXT dan JSON.
-* 📝 **Logging Lengkap** — Log aktivitas untuk debugging, baik ke console maupun ke file (`logs/ai_ocr_system.log`).
-* 🧹 **Kode Bersih** — Menggunakan type hints, docstring di setiap fungsi, menerapkan prinsip *single responsibility*, tanpa API yang deprecated.
+* **Dukungan Berbagai Media** — Mendukung dokumen, sertifikat, buku, KTP, screenshot WhatsApp/website, poster, banner, papan nama, kemasan produk, brosur, dan teks pada kamera secara real-time.
+* **Preprocessing Adaptif** — Sistem otomatis mengklasifikasikan gambar (`document` / `screenshot` / `camera` / `outdoor`) dan hanya menerapkan *enhancement* yang relevan, bukan preprocessing seragam yang berlebihan.
+* **Pipeline OCR Lengkap** — Deteksi teks → klasifikasi sudut → pengenalan teks → rekonstruksi urutan baca alami.
+* **Akselerasi GPU** — Otomatis memakai GPU jika tersedia, fallback ke CPU jika tidak.
+* **Visualisasi Kaya** — Visualisasi *bounding box*, *confidence score*, teks hasil OCR, dan FPS (pada mode realtime).
+* **Ekspor Fleksibel** — Menyimpan hasil ke format TXT dan JSON.
+* **Logging Lengkap** — Log aktivitas untuk debugging, baik ke console maupun ke file (`logs/ai_ocr_system.log`).
+* **Kode Bersih** — Menggunakan type hints, docstring di setiap fungsi, menerapkan prinsip *single responsibility*, tanpa API yang deprecated.
 
 ---
 
-## 📂 Struktur Folder
+## Struktur Folder
 
 ```directory
 ai-ocr-system/
@@ -50,7 +50,7 @@ ai-ocr-system/
 
 ---
 
-## 🛠️ Teknologi yang Digunakan
+## Teknologi yang Digunakan
 
 | Komponen | Teknologi | Keterangan |
 | :--- | :--- | :--- |
@@ -63,7 +63,7 @@ ai-ocr-system/
 
 ---
 
-## 🚀 Instalasi
+## Instalasi
 
 1. **Clone / salin folder project ini**, lalu masuk ke direktorinya:
    ```bash
@@ -92,11 +92,11 @@ ai-ocr-system/
    pip install -r requirements.txt
    ```
 
-> 💡 **Info:** Saat pertama kali dijalankan, PaddleOCR akan otomatis mengunduh model (deteksi, klasifikasi sudut, recognition) dari server resminya. Pastikan ada koneksi internet pada run pertama.
+> **Info:** Saat pertama kali dijalankan, PaddleOCR akan otomatis mengunduh model (deteksi, klasifikasi sudut, recognition) dari server resminya. Pastikan ada koneksi internet pada run pertama.
 
 ---
 
-## 💻 Cara Menjalankan
+## Cara Menjalankan
 
 ### **OCR pada satu gambar:**
 ```bash
@@ -112,7 +112,7 @@ python app.py --folder assets/images
 ```bash
 python app.py --camera
 ```
-> 💡 *Catatan:* Tekan `q` untuk keluar, `s` untuk menyimpan snapshot hasil OCR saat ini.
+> **Catatan:** Tekan `q` untuk keluar, `s` untuk menyimpan snapshot hasil OCR saat ini.
 
 ### **OCR pada file video (frame-by-frame):**
 ```bash
@@ -128,7 +128,7 @@ python app.py --image image.jpg --export both
 
 ---
 
-## 📥 Output yang Dihasilkan
+## Output yang Dihasilkan
 
 * Gambar teranotasi (bounding box + teks + confidence) → `assets/outputs/<nama_file>_annotated.jpg`
 * Hasil ekspor teks → `outputs/<nama_file>.txt`
@@ -144,7 +144,7 @@ python app.py --image image.jpg --export both
 
 ---
 
-## 📊 Contoh Hasil
+## Contoh Hasil
 
 Setelah menjalankan `python app.py --image contoh.jpg --export both`, kamu akan mendapatkan:
 
@@ -154,7 +154,7 @@ Setelah menjalankan `python app.py --image contoh.jpg --export both`, kamu akan 
 
 ---
 
-## 🏗️ Catatan Arsitektur
+## Catatan Arsitektur
 
 Pipeline mengikuti alur berikut, dengan setiap tahap sebagai modul terpisah di `core/` (*Single Responsibility Principle*):
 
