@@ -27,6 +27,22 @@ export const OCRImageViewer: React.FC<OCRImageViewerProps> = ({
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [imgDims, setImgDims] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  
+  // State refs to keep values fresh in native listeners without recreation
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+  const isDraggingRef = useRef(isDragging);
+  const dragStartRef = useRef(dragStart);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+    panRef.current = pan;
+    isDraggingRef.current = isDragging;
+    dragStartRef.current = dragStart;
+  }, [zoom, pan, isDragging, dragStart]);
+
+  const touchStartDistRef = useRef<number | null>(null);
+  const touchStartZoomRef = useRef<number>(1);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -72,7 +88,7 @@ export const OCRImageViewer: React.FC<OCRImageViewerProps> = ({
     }
   }, [selectedIndex, regions, imgDims]);
 
-  // Scroll to zoom on mouse wheel inside the image viewport
+  // Scroll to zoom on mouse wheel & native touch handlers inside the image viewport
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
@@ -100,9 +116,67 @@ export const OCRImageViewer: React.FC<OCRImageViewerProps> = ({
       });
     };
 
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        // Pinch zoom start
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        touchStartDistRef.current = dist;
+        touchStartZoomRef.current = zoomRef.current;
+        setIsDragging(false);
+      } else if (e.touches.length === 1) {
+        // Panning start
+        if (zoomRef.current <= 1) return;
+        setIsDragging(true);
+        setDragStart({
+          x: e.touches[0].clientX - panRef.current.x,
+          y: e.touches[0].clientY - panRef.current.y,
+        });
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchStartDistRef.current !== null) {
+        // Pinch zoom action
+        e.preventDefault(); // Prevent browser/page zoom
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const factor = dist / touchStartDistRef.current;
+        const nextZoom = Math.min(Math.max(touchStartZoomRef.current * factor, 0.5), 4);
+        setZoom(nextZoom);
+        if (nextZoom === 1) {
+          setPan({ x: 0, y: 0 });
+        }
+      } else if (e.touches.length === 1 && isDraggingRef.current) {
+        // Panning action
+        e.preventDefault(); // Prevent page scroll
+        setPan({
+          x: e.touches[0].clientX - dragStartRef.current.x,
+          y: e.touches[0].clientY - dragStartRef.current.y,
+        });
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchStartDistRef.current = null;
+      setIsDragging(false);
+    };
+
+    // Attach native event listeners as non-passive to allow e.preventDefault()
     viewport.addEventListener('wheel', handleWheel, { passive: false });
+    viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
+    viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
+    viewport.addEventListener('touchend', handleTouchEnd, { passive: false });
+
     return () => {
       viewport.removeEventListener('wheel', handleWheel);
+      viewport.removeEventListener('touchstart', handleTouchStart);
+      viewport.removeEventListener('touchmove', handleTouchMove);
+      viewport.removeEventListener('touchend', handleTouchEnd);
     };
   }, []);
 
@@ -129,6 +203,8 @@ export const OCRImageViewer: React.FC<OCRImageViewerProps> = ({
     setZoom(1);
     setPan({ x: 0, y: 0 });
   };
+
+
 
   // Pan controls
   const handleMouseDown = (e: React.MouseEvent) => {
