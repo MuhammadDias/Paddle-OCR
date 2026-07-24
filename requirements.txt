@@ -1,0 +1,18 @@
+# Core numerical & image libraries
+numpy>=1.26.0
+opencv-python>=4.9.0.80
+Pillow>=10.3.0
+
+# OCR engine (latest PaddleOCR)
+# IMPORTANT: install PaddlePaddle SEPARATELY and BEFORE this file, choosing
+# ONE of the two builds below depending on your hardware. Do NOT add a
+# generic "paddlepaddle" line here — both packages install into the same
+# `paddle` import path, so if this file ever installs the CPU package after
+# you've installed the GPU package, it silently overwrites your GPU build
+# with the CPU one (this bit us in testing).
+#   CPU only   -> pip install paddlepaddle
+#   NVIDIA GPU -> pip install paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/stable/<your-cuda-version>/
+paddleocr>=2.8.1
+
+# Utilities
+tqdm>=4.66.0
