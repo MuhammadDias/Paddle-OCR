@@ -16,7 +16,7 @@ import base64
 import json
 import logging
 import os
-from typing import Generator
+from typing import Generator, Optional
 
 import cv2
 import fitz  # PyMuPDF
@@ -31,7 +31,7 @@ from core.visualizer import draw_ocr_results
 logger = logging.getLogger("ai_ocr_system.pdf_processor")
 
 
-def process_pdf_generator(pdf_bytes: bytes, filename: str) -> Generator[str, None, None]:
+def process_pdf_generator(pdf_bytes: bytes, filename: str, user_id: Optional[int] = None) -> Generator[str, None, None]:
     """
     Process a PDF file page by page, streaming progress as line-delimited JSON.
 
@@ -182,5 +182,22 @@ def process_pdf_generator(pdf_bytes: bytes, filename: str) -> Generator[str, Non
             json.dump(clean_results, f, indent=2, ensure_ascii=False)
     except Exception as e:
         logger.error("Failed to write PDF JSON output file: %s", e)
+
+    # Save to SQLite database ocr_history (if authenticated)
+    if user_id:
+        try:
+            from core.database import add_history
+            total_regions = sum(len(r["blocks"]) for r in results)
+            add_history(user_id, filename, {
+                "is_pdf": True,
+                "pages": results,
+                "stats": {
+                    "total_regions": total_regions,
+                    "total_pages": len(results)
+                }
+            })
+            logger.info("Successfully saved PDF OCR result to database history for user ID %d", user_id)
+        except Exception as db_err:
+            logger.error("Failed to save PDF OCR result to database history: %s", db_err)
 
     yield json.dumps({"status": "completed", "results": results}) + "\n"

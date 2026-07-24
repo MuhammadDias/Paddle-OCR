@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { 
   FileText, Upload, Play, X, Trash2, Download, 
-  RefreshCw, Maximize2, AlertTriangle
+  RefreshCw, Maximize2, AlertTriangle, ZoomIn, ZoomOut, RotateCcw
 } from 'lucide-react';
 import { processPdfOCR } from '../services/api';
 import type { PDFPageResult, PDFProgressUpdate } from '../services/api';
@@ -538,32 +538,223 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
         </div>
       )}
 
-      {/* Fullscreen Page Preview Modal */}
+      {/* Fullscreen Page Preview Modal (Zoomable) */}
       {fullscreenImage && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="relative w-full max-w-4xl bg-neo-bg rounded-neo p-6 shadow-neo-card border border-white/60 flex flex-col gap-4 animate-scale-in">
-            {/* Close action */}
-            <button
-              onClick={() => setFullscreenImage(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-neo-muted hover:text-rose-500 border border-white transition-all duration-200"
-              title="Tutup"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <h4 className="text-xs font-extrabold text-neo-text uppercase tracking-wider ml-1">Detail Pratinjau Halaman</h4>
-            
-            <div className="w-full aspect-[4/3] bg-neo-bg shadow-neo-pressed rounded-neo overflow-hidden flex items-center justify-center border border-neo-shadow/20 p-2">
-              <img 
-                src={fullscreenImage} 
-                alt="Page Preview Fullscreen" 
-                className="max-w-full max-h-full object-contain"
-              />
-            </div>
-          </div>
-        </div>
+        <PDFPageZoomViewer
+          imageUrl={fullscreenImage}
+          onClose={() => setFullscreenImage(null)}
+        />
       )}
 
+    </div>
+  );
+};
+
+interface PDFPageZoomViewerProps {
+  imageUrl: string;
+  onClose: () => void;
+}
+
+const PDFPageZoomViewer: React.FC<PDFPageZoomViewerProps> = ({ imageUrl, onClose }) => {
+  const [zoom, setZoom] = useState<number>(1);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const zoomRef = useRef(zoom);
+  const panRef = useRef(pan);
+  const isDraggingRef = useRef(isDragging);
+  const dragStartRef = useRef(dragStart);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+    panRef.current = pan;
+    isDraggingRef.current = isDragging;
+    dragStartRef.current = dragStart;
+  }, [zoom, pan, isDragging, dragStart]);
+
+  const touchStartDistRef = useRef<number | null>(null);
+  const touchStartZoomRef = useRef<number>(1);
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = 0.15;
+      setZoom((prevZoom) => {
+        let nextZoom = prevZoom;
+        if (e.deltaY < 0) {
+          nextZoom = Math.min(prevZoom + zoomFactor, 4);
+        } else {
+          nextZoom = Math.max(prevZoom - zoomFactor, 0.5);
+        }
+        if (nextZoom === 1) setPan({ x: 0, y: 0 });
+        return nextZoom;
+      });
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        touchStartDistRef.current = dist;
+        touchStartZoomRef.current = zoomRef.current;
+        setIsDragging(false);
+      } else if (e.touches.length === 1) {
+        if (zoomRef.current <= 1) return;
+        setIsDragging(true);
+        setDragStart({
+          x: e.touches[0].clientX - panRef.current.x,
+          y: e.touches[0].clientY - panRef.current.y,
+        });
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchStartDistRef.current !== null) {
+        e.preventDefault();
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const factor = dist / touchStartDistRef.current;
+        const nextZoom = Math.min(Math.max(touchStartZoomRef.current * factor, 0.5), 4);
+        setZoom(nextZoom);
+        if (nextZoom === 1) setPan({ x: 0, y: 0 });
+      } else if (e.touches.length === 1 && isDraggingRef.current) {
+        e.preventDefault();
+        setPan({
+          x: e.touches[0].clientX - dragStartRef.current.x,
+          y: e.touches[0].clientY - dragStartRef.current.y,
+        });
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchStartDistRef.current = null;
+      setIsDragging(false);
+    };
+
+    viewport.addEventListener('wheel', handleWheel, { passive: false });
+    viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
+    viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
+    viewport.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+    return () => {
+      viewport.removeEventListener('wheel', handleWheel);
+      viewport.removeEventListener('touchstart', handleTouchStart);
+      viewport.removeEventListener('touchmove', handleTouchMove);
+      viewport.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
+
+  const handleZoomIn = () => setZoom((z) => Math.min(z + 0.25, 4));
+  const handleZoomOut = () => {
+    setZoom((z) => {
+      const nextZoom = Math.max(z - 0.25, 0.5);
+      if (nextZoom === 1) setPan({ x: 0, y: 0 });
+      return nextZoom;
+    });
+  };
+  const handleReset = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoom <= 1) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    setPan({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="relative w-full max-w-4xl bg-neo-bg rounded-neo p-6 shadow-neo-card border border-white/60 flex flex-col gap-4 animate-scale-in">
+        
+        {/* Header with Zoom Controls */}
+        <div className="flex justify-between items-center mr-12">
+          <h4 className="text-xs font-extrabold text-neo-text uppercase tracking-wider">Pratinjau Halaman Dokumen</h4>
+          
+          <div className="flex gap-2 bg-neo-bg shadow-neo-btn border border-white/40 p-1 rounded-full">
+            <button
+              onClick={handleZoomIn}
+              title="Perbesar"
+              className="p-2 rounded-full text-neo-muted hover:text-indigo-600 hover:bg-neo-shadow/30 transition-all duration-200"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleZoomOut}
+              title="Perkecil"
+              className="p-2 rounded-full text-neo-muted hover:text-indigo-600 hover:bg-neo-shadow/30 transition-all duration-200"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleReset}
+              title="Reset"
+              className="p-2 rounded-full text-neo-muted hover:text-indigo-600 hover:bg-neo-shadow/30 transition-all duration-200"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 rounded-full bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover text-neo-muted hover:text-rose-500 border border-white transition-all duration-200"
+          title="Tutup"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        {/* Image Viewport Container */}
+        <div
+          ref={viewportRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          className={`w-full aspect-[4/3] overflow-hidden rounded-neo neo-inset border border-white/40 bg-neo-shadow/10 flex items-center justify-center relative ${
+            zoom > 1 ? 'cursor-grab active:cursor-grabbing' : ''
+          }`}
+        >
+          <div
+            style={{
+              transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
+              transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
+            }}
+            className="relative max-w-full max-h-full flex items-center justify-center transform-gpu"
+          >
+            <img
+              src={imageUrl}
+              alt="Page Preview Zoom"
+              className="max-w-full max-h-[70vh] object-contain pointer-events-none select-none rounded-neo"
+            />
+          </div>
+        </div>
+        
+        <div className="text-[10px] text-neo-muted text-center">
+          Gunakan cubitan (pinch) pada layar sentuh atau scroll mouse untuk memperbesar gambar, lalu geser untuk memindahkan.
+        </div>
+
+      </div>
     </div>
   );
 };
