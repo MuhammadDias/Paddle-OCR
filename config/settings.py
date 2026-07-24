@@ -182,6 +182,7 @@ BOX_THICKNESS: Final[int] = 2
 FONT_SCALE: Final[float] = 0.5
 
 EXPORT_FORMATS: Final[tuple[str, ...]] = ("txt", "json")
+MAX_PDF_SIZE_MB: Final[int] = 20
 
 
 # --------------------------------------------------------------------------- #

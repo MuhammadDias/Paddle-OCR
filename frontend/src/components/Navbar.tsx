@@ -1,17 +1,33 @@
 import React, { useState } from 'react';
-import { Scan, Info, X, Cpu, Eye, Code } from 'lucide-react';
+import { Scan, Info, X, Cpu, Eye, Code, History, LogIn, LogOut, User, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface NavbarProps {
   onLogoClick?: () => void;
+  onOpenHistory?: () => void;
+  onOpenAuth?: () => void;
+  onLogout?: () => void;
+  isLoggedIn?: boolean;
+  userEmail?: string | null;
+  onOpenPdfOcr?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  onLogoClick,
+  onOpenHistory,
+  onOpenAuth,
+  onLogout,
+  isLoggedIn = false,
+  userEmail = null,
+  onOpenPdfOcr,
+}) => {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
 
   return (
     <>
       <nav className="w-full py-4 px-6 md:px-12 flex justify-between items-center bg-neo-bg shadow-neo-flat rounded-b-neo border-b border-white/50 sticky top-0 z-40">
+        
+        {/* Brand Logo & Name */}
         <div 
           onClick={onLogoClick}
           className={`flex items-center gap-3 ${onLogoClick ? 'cursor-pointer hover:opacity-80 transition-all duration-200' : ''}`}
@@ -23,13 +39,75 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
             Paddle OCR
           </span>
         </div>
-        <button
-          onClick={() => setIsAboutOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover rounded-full text-sm font-medium text-neo-muted hover:text-neo-text border border-white/50 transition-all duration-200"
-        >
-          <Info className="w-4 h-4" />
-          <span>About</span>
-        </button>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-3">
+          
+          {/* History Button (Logged In Only) */}
+          {isLoggedIn && onOpenHistory && (
+            <button
+              onClick={onOpenHistory}
+              className="flex items-center gap-2 px-3.5 py-2 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover rounded-full text-xs font-bold text-indigo-600 border border-white transition-all duration-200"
+              title="Buka Riwayat Pemindaian"
+            >
+              <History className="w-4 h-4" />
+              <span className="hidden sm:inline">Riwayat</span>
+            </button>
+          )}
+
+          {/* PDF OCR Button (Logged In Only) */}
+          {isLoggedIn && onOpenPdfOcr && (
+            <button
+              onClick={onOpenPdfOcr}
+              className="flex items-center gap-2 px-3.5 py-2 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover rounded-full text-xs font-bold text-indigo-600 border border-white transition-all duration-200"
+              title="Buka PDF OCR Workspace"
+            >
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">PDF OCR</span>
+            </button>
+          )}
+
+          {/* User Auth Buttons */}
+          {isLoggedIn ? (
+            <div className="flex items-center gap-2">
+              <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-neo-bg shadow-neo-pressed rounded-full text-xs font-semibold text-neo-muted border border-white/30">
+                <User className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="truncate max-w-[120px]">{userEmail}</span>
+              </div>
+
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover rounded-full text-xs font-bold text-rose-600 border border-white transition-all duration-200"
+                  title="Keluar Akun"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Keluar</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            onOpenAuth && (
+              <button
+                onClick={onOpenAuth}
+                className="flex items-center gap-2 px-4 py-2 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover rounded-full text-xs font-extrabold text-indigo-600 border border-white transition-all duration-200 hover:scale-[1.01]"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Masuk / Daftar</span>
+              </button>
+            )
+          )}
+
+          {/* About Button */}
+          <button
+            onClick={() => setIsAboutOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-neo-bg shadow-neo-btn hover:shadow-neo-btn-hover rounded-full text-xs font-medium text-neo-muted hover:text-neo-text border border-white/50 transition-all duration-200"
+          >
+            <Info className="w-4 h-4" />
+            <span className="hidden sm:inline">About</span>
+          </button>
+        </div>
+
       </nav>
 
       {/* About Modal */}
@@ -60,7 +138,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-neo-text">Paddle OCR System</h3>
-                    <p className="text-xs text-neo-muted">Sistem Optical Character Recognition Modular</p>
+                    <p className="text-xs text-neo-muted">Sistem Optical Character Recognition Modular & Entitas Cerdas</p>
                   </div>
                 </div>
                 <button
@@ -110,7 +188,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onLogoClick }) => {
               </div>
 
               <div className="border-t border-neo-shadow/50 pt-4 flex justify-between items-center text-xs text-neo-muted">
-                <span>Teknologi: React + TypeScript + Vite + Tailwind + FastAPI</span>
+                <span>Teknologi: React + TypeScript + Vite + Tailwind + FastAPI + SQLite</span>
                 <span>Lisensi Bebas</span>
               </div>
             </motion.div>

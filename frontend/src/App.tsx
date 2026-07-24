@@ -9,10 +9,13 @@ import { StatsCard } from './components/StatsCard';
 import { LoadingSkeleton } from './components/LoadingSkeleton';
 import { Toast } from './components/Toast';
 import type { ToastType } from './components/Toast';
-import { processOCR, checkStatus } from './services/api';
-import type { OCRResponse } from './services/api';
+import { processOCR, checkStatus, getMe } from './services/api';
+import type { OCRResponse, User } from './services/api';
 import { SystemDiagnostics } from './components/SystemDiagnostics';
 import { LandingPage } from './components/LandingPage';
+import { AuthCard } from './components/AuthCard';
+import { HistoryDrawer } from './components/HistoryDrawer';
+import { PdfOcrWorkspace } from './components/PdfOcrWorkspace';
 import { Image, ArrowLeft, RefreshCw } from 'lucide-react';
 
 function App() {
@@ -25,12 +28,25 @@ function App() {
   const [backendStatus, setBackendStatus] = useState<'online' | 'offline' | 'loading'>('loading');
   const [backendDevice, setBackendDevice] = useState<string>('...');
 
-  // Navigation state
-  const [view, setView] = useState<'landing' | 'workspace'>('landing');
+  // Navigation & User Auth States
+  const [view, setView] = useState<'landing' | 'workspace' | 'pdf-ocr'>('landing');
+  const [user, setUser] = useState<User | null>(null);
 
-  // Check backend status on mount
+  // Guard access to pdf-ocr
   useEffect(() => {
-    const fetchStatus = async () => {
+    if (view === 'pdf-ocr' && !user) {
+      setView('landing');
+      setIsAuthModalOpen(true);
+      handleShowToast('Harap masuk terlebih dahulu untuk mengakses fitur PDF OCR.', 'error');
+    }
+  }, [view, user]);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState<boolean>(false);
+
+  // Check backend status & active user token on mount
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      // 1. Check Backend status
       try {
         const response = await checkStatus();
         setBackendStatus(response.status === 'online' ? 'online' : 'offline');
@@ -40,8 +56,21 @@ function App() {
         setBackendStatus('offline');
         setBackendDevice('Tidak Aktif');
       }
+
+      // 2. Check Active Token
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const userData = await getMe();
+          setUser(userData);
+        } catch (err) {
+          console.warn('Session expired or invalid:', err);
+          localStorage.removeItem('token');
+          setUser(null);
+        }
+      }
     };
-    fetchStatus();
+    fetchInitialData();
   }, []);
 
   // Interactive highlighting states
@@ -54,7 +83,7 @@ function App() {
   // Clear URL helper on unmount or file change
   useEffect(() => {
     return () => {
-      if (imageUrl) {
+      if (imageUrl && !imageUrl.startsWith('data:image')) {
         URL.revokeObjectURL(imageUrl);
       }
     };
@@ -64,8 +93,22 @@ function App() {
     setToast({ message, type });
   };
 
+  const handleAuthSuccess = (token: string, email: string) => {
+    localStorage.setItem('token', token);
+    setUser({ id: Date.now(), email });
+    setIsAuthModalOpen(false);
+    handleShowToast(`Selamat datang, ${email}!`, 'success');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setUser(null);
+    setIsHistoryDrawerOpen(false);
+    handleShowToast('Anda telah keluar dari akun.', 'info');
+  };
+
   const handleFileSelect = (selectedFile: File) => {
-    if (imageUrl) {
+    if (imageUrl && !imageUrl.startsWith('data:image')) {
       URL.revokeObjectURL(imageUrl);
     }
     setFile(selectedFile);
@@ -73,11 +116,10 @@ function App() {
     setOcrResponse(null);
     setSelectedIndex(null);
     setHoveredIndex(null);
-    handleShowToast('Gambar berhasil diunggah. Siap memproses OCR.', 'success');
   };
 
   const handleRemoveImage = () => {
-    if (imageUrl) {
+    if (imageUrl && !imageUrl.startsWith('data:image')) {
       URL.revokeObjectURL(imageUrl);
     }
     setFile(null);
@@ -107,20 +149,46 @@ function App() {
     }
   };
 
+  const handleSelectHistoryItem = (historyResult: OCRResponse, filename: string) => {
+    if (imageUrl && !imageUrl.startsWith('data:image')) {
+      URL.revokeObjectURL(imageUrl);
+    }
+    setOcrResponse(historyResult);
+    setImageUrl(historyResult.annotated_image);
+    const dummyFile = new File([""], filename, { type: "image/jpeg" });
+    setFile(dummyFile);
+    setView('workspace');
+    handleShowToast(`Memuat riwayat: ${filename}`, 'success');
+  };
+
   return (
     <div className="min-h-screen bg-neo-bg text-neo-text flex flex-col justify-between selection:bg-indigo-200">
       <div className="w-full flex flex-col gap-8 pb-12">
-        <Navbar onLogoClick={() => setView('landing')} />
+        <Navbar 
+          onLogoClick={() => setView('landing')} 
+          onOpenHistory={() => setIsHistoryDrawerOpen(true)}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+          onLogout={handleLogout}
+          isLoggedIn={user !== null}
+          userEmail={user?.email || null}
+          onOpenPdfOcr={() => setView('pdf-ocr')}
+        />
 
         <main className="max-w-6xl w-full mx-auto px-4 md:px-8 flex flex-col gap-8 items-center">
           
-          {/* Main Workspace */}
           {/* Navigation View Routing */}
           {view === 'landing' ? (
             <LandingPage
               onEnterWorkspace={() => setView('workspace')}
               status={backendStatus}
               device={backendDevice}
+              isLoggedIn={user !== null}
+              userEmail={user?.email || null}
+            />
+          ) : view === 'pdf-ocr' ? (
+            <PdfOcrWorkspace
+              onShowToast={handleShowToast}
+              onBackToHome={() => setView('landing')}
             />
           ) : (
             /* Main Workspace */
@@ -216,7 +284,7 @@ function App() {
                           </div>
                           <div>
                             <h4 className="text-sm font-bold text-neo-text">Hasil Pemrosesan OCR</h4>
-                            <p className="text-[10px] text-neo-muted">Analisis deteksi dan klasifikasi selesai</p>
+                            <p className="text-[10px] text-neo-muted">Analisis deteksi, klasifikasi, dan entitas selesai</p>
                           </div>
                         </div>
 
@@ -250,10 +318,11 @@ function App() {
                           )}
                         </div>
 
-                        {/* Right Column: Searchable Text List */}
+                        {/* Right Column: Searchable Text List & Smart Entity Tabs */}
                         <div className="lg:col-span-5 w-full">
                           <OCRResultList
                             regions={ocrResponse.text_regions}
+                            entities={ocrResponse.entities}
                             hoveredIndex={hoveredIndex}
                             selectedIndex={selectedIndex}
                             onHoverRegion={setHoveredIndex}
@@ -275,6 +344,22 @@ function App() {
       </div>
 
       <Footer />
+
+      {/* Auth Login/Register Modal */}
+      {isAuthModalOpen && (
+        <AuthCard
+          onSuccess={handleAuthSuccess}
+          onClose={() => setIsAuthModalOpen(false)}
+        />
+      )}
+
+      {/* History Slide-over Drawer */}
+      <HistoryDrawer
+        isOpen={isHistoryDrawerOpen}
+        onClose={() => setIsHistoryDrawerOpen(false)}
+        onSelectItem={handleSelectHistoryItem}
+        onShowToast={handleShowToast}
+      />
 
       {/* Floating Toast Alerts */}
       {toast && (

@@ -3,6 +3,7 @@ FastAPI web server for ai-ocr-system.
 
 Provides an API endpoint for running the OCR pipeline on uploaded images,
 returning structured results, an annotated image (Base64), and statistics.
+Also manages user registration, login, and OCR task history with a 1-day retention TTL.
 """
 
 from __future__ import annotations
@@ -10,28 +11,37 @@ from __future__ import annotations
 import base64
 import logging
 import time
-from typing import Any
+from typing import Any, Optional
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, Depends, Header
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config.settings import DEVICE, configure_logging
+from config.settings import DEVICE, configure_logging, MAX_PDF_SIZE_MB
 from core.image_processor import preprocess_image
 from core.ocr_engine import OCREngine
 from core.postprocessor import postprocess_results
 from core.visualizer import draw_ocr_results
 
+# Database & Auth & Entities
+from core.database import init_db, create_user, get_user_by_email, add_history, get_history
+from core.auth import hash_password, verify_password, create_access_token, decode_access_token
+from core.entity_extractor import extract_entities
+
 # Configure system-wide logging
 configure_logging()
 logger = logging.getLogger("ai_ocr_system.server")
 
+# Initialize SQLite database tables on startup
+init_db()
+
 app = FastAPI(
     title="PaddleOCR API Server",
     description="Backend API for ai-ocr-system web interface.",
-    version="1.0.0",
+    version="1.1.0",
 )
 
 # Enable CORS for frontend integration
@@ -44,6 +54,10 @@ app.add_middleware(
 )
 
 
+# --------------------------------------------------------------------------- #
+# Pydantic Schemas
+# --------------------------------------------------------------------------- #
+
 class TextRegion(BaseModel):
     index: int
     text: str
@@ -51,11 +65,59 @@ class TextRegion(BaseModel):
     box: list[list[float]]
 
 
+class Entities(BaseModel):
+    emails: list[str]
+    phones: list[str]
+    currencies: list[str]
+    urls: list[str]
+
+
 class OCRResponse(BaseModel):
     text_regions: list[TextRegion]
     annotated_image: str  # Base64 data URL
     stats: dict[str, Any]
+    entities: Entities
 
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+# --------------------------------------------------------------------------- #
+# Authentication Helper
+# --------------------------------------------------------------------------- #
+
+def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """
+    Fetch and validate the current user from the Authorization bearer token header.
+    Returns the user dict if valid, else None.
+    """
+    if not authorization:
+        return None
+    try:
+        if not authorization.startswith("Bearer "):
+            return None
+        token = authorization.split(" ")[1]
+        payload = decode_access_token(token)
+        if not payload or "email" not in payload:
+            return None
+        
+        user = get_user_by_email(payload["email"])
+        return dict(user) if user else None
+    except Exception as exc:
+        logger.error("Authentication check failed: %s", exc)
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# Endpoints
+# --------------------------------------------------------------------------- #
 
 @app.get("/api/status")
 async def get_status() -> dict[str, str]:
@@ -66,8 +128,126 @@ async def get_status() -> dict[str, str]:
     }
 
 
+@app.post("/api/auth/register")
+async def register(user_data: UserRegister):
+    """Register a new user account and return a session token."""
+    email = user_data.email.strip().lower()
+    password = user_data.password
+    
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Alamat email tidak valid.")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Kata sandi minimal terdiri dari 6 karakter.")
+    
+    try:
+        hashed_pw = hash_password(password)
+        user_id = create_user(email, hashed_pw)
+        token = create_access_token({"sub": user_id, "email": email})
+        
+        return {
+            "status": "success",
+            "message": "Pendaftaran akun berhasil.",
+            "access_token": token,
+            "token_type": "bearer",
+            "user": {"id": user_id, "email": email}
+        }
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+    except Exception as exc:
+        logger.error("Registration error: %s", exc)
+        raise HTTPException(status_code=500, detail="Terjadi kesalahan saat mendaftarkan akun.")
+
+
+@app.post("/api/auth/login")
+async def login(credentials: UserLogin):
+    """Authenticate credentials and return a signed JWT token."""
+    email = credentials.email.strip().lower()
+    password = credentials.password
+    
+    user = get_user_by_email(email)
+    if not user or not verify_password(password, user["hashed_password"]):
+        raise HTTPException(status_code=400, detail="Email atau kata sandi tidak cocok.")
+    
+    token = create_access_token({"sub": user["id"], "email": user["email"]})
+    return {
+        "status": "success",
+        "message": "Berhasil masuk.",
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"id": user["id"], "email": user["email"]}
+    }
+
+
+@app.get("/api/auth/me")
+async def get_me(current_user: Optional[dict] = Depends(get_current_user)):
+    """Fetch current user identity if authenticated."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sesi telah kedaluwarsa. Silakan masuk kembali.")
+    return {
+        "id": current_user["id"],
+        "email": current_user["email"]
+    }
+
+
+@app.get("/api/history")
+async def get_user_history(current_user: Optional[dict] = Depends(get_current_user)):
+    """Retrieve history of processed documents for the user (expires in 24 hours)."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sesi telah kedaluwarsa. Silakan masuk kembali.")
+    try:
+        history = get_history(current_user["id"])
+        return history
+    except Exception as exc:
+        logger.error("Failed to fetch user history: %s", exc)
+        raise HTTPException(status_code=500, detail="Gagal mengambil data riwayat.")
+
+
+@app.post("/api/ocr-pdf")
+async def process_pdf_ocr(
+    file: UploadFile = File(...),
+    current_user: Optional[dict] = Depends(get_current_user)
+):
+    """
+    Process an uploaded PDF document:
+    1. Authenticate user.
+    2. Check file format.
+    3. Check file size.
+    4. Process page-by-page asymmetrically (native text extraction or PaddleOCR).
+    5. Return streaming progress updates.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Sesi telah kedaluwarsa. Silakan masuk kembali.")
+    
+    filename = file.filename or "document.pdf"
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Format berkas harus berupa PDF.")
+        
+    try:
+        contents = await file.read()
+        file_size_mb = len(contents) / (1024 * 1024)
+        if file_size_mb > MAX_PDF_SIZE_MB:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ukuran berkas PDF melebihi batas maksimum ({MAX_PDF_SIZE_MB} MB)."
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to read PDF file: %s", exc)
+        raise HTTPException(status_code=400, detail="Gagal membaca berkas PDF.")
+
+    from core.pdf_processor import process_pdf_generator
+    return StreamingResponse(
+        process_pdf_generator(contents, filename),
+        media_type="application/x-ndjson"
+    )
+
+
 @app.post("/api/ocr", response_model=OCRResponse)
-async def process_ocr(image: UploadFile = File(...)) -> OCRResponse:
+async def process_ocr(
+    image: UploadFile = File(...),
+    authorization: Optional[str] = Header(None)
+) -> OCRResponse:
     """
     Process an uploaded image through the OCR pipeline:
     1. Read and decode image.
@@ -75,9 +255,14 @@ async def process_ocr(image: UploadFile = File(...)) -> OCRResponse:
     3. OCR inference (PaddleOCR).
     4. Postprocessing (Clean text & natural reading order).
     5. Draw bounding boxes (OpenCV) -> Base64.
-    6. Package results and return.
+    6. Extract Entities (Emails, Phones, Currency, Links).
+    7. Save to History (if user is authenticated).
+    8. Package results and return.
     """
     start_time = time.time()
+    
+    # Optional authentication check
+    current_user = get_current_user(authorization)
     
     # Read uploaded file
     try:
@@ -92,7 +277,7 @@ async def process_ocr(image: UploadFile = File(...)) -> OCRResponse:
 
     if img is None:
         logger.error("Failed to decode uploaded image")
-        raise HTTPException(status_code=400, detail="Invalid image file or format.")
+        raise HTTPException(status_code=400, detail="Format file gambar tidak valid.")
 
     orig_height, orig_width = img.shape[:2]
 
@@ -146,16 +331,36 @@ async def process_ocr(image: UploadFile = File(...)) -> OCRResponse:
             "resolution": f"{orig_width}x{orig_height}",
         }
         
-        logger.info(
-            "API processed OCR successfully | regions=%d | time=%.3fs",
-            len(results), duration
+        # 6. Extract entities (Email, Phone, Currency, Links)
+        full_text = " \n ".join(res.text for res in results)
+        entities_dict = extract_entities(full_text)
+        entities = Entities(
+            emails=entities_dict["emails"],
+            phones=entities_dict["phones"],
+            currencies=entities_dict["currencies"],
+            urls=entities_dict["urls"]
         )
         
-        return OCRResponse(
+        ocr_response = OCRResponse(
             text_regions=regions,
             annotated_image=annotated_data_url,
             stats=stats,
+            entities=entities,
         )
+        
+        # 7. Save to database history (if authenticated)
+        if current_user:
+            try:
+                add_history(current_user["id"], image.filename, ocr_response.model_dump())
+            except Exception as hist_err:
+                logger.error("Failed to write to OCR history DB: %s", hist_err)
+        
+        logger.info(
+            "API processed OCR successfully | regions=%d | time=%.3fs | user_authenticated=%s",
+            len(results), duration, str(current_user is not None)
+        )
+        
+        return ocr_response
 
     except Exception as exc:
         logger.exception("Unexpected error during API OCR processing")

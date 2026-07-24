@@ -1,32 +1,51 @@
 import React from 'react';
-import { Scan, ArrowRight, Zap, Sliders, FileJson, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Scan, ArrowRight, Zap, Sliders, FileJson, ShieldCheck, ShieldAlert, Key, History, Search } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface LandingPageProps {
   onEnterWorkspace: () => void;
   status: 'online' | 'offline' | 'loading';
   device: string;
+  isLoggedIn: boolean;
+  userEmail: string | null;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onEnterWorkspace,
   status,
   device,
+  isLoggedIn,
+  userEmail,
 }) => {
   const features = [
     {
       title: 'Akselerasi GPU CUDA',
-      desc: 'Memanfaatkan performa kartu grafis NVIDIA untuk inferensi neural network berkecepatan tinggi, memproses puluhan teks region dalam hitungan milidetik.',
+      desc: 'Memanfaatkan kartu grafis NVIDIA untuk inferensi neural network berkecepatan tinggi, memproses teks dalam hitungan milidetik.',
       icon: <Zap className="w-6 h-6 text-indigo-500" />,
     },
     {
       title: 'Enhancement Adaptif',
-      desc: 'OpenCV otomatis mendeteksi kategori gambar untuk menerapkan koreksi kemiringan (deskew), kontras kontur, pembersihan derau (denoise), dan penajaman teks.',
+      desc: 'OpenCV otomatis mendeteksi kategori gambar untuk koreksi kemiringan (deskew), pembersihan derau, dan penajaman kontur teks.',
       icon: <Sliders className="w-6 h-6 text-indigo-500" />,
     },
     {
+      title: 'Ekstraksi Entitas Cerdas',
+      desc: 'Mengenali otomatis data penting seperti mata uang (Rupiah/USD), nomor telepon, email, dan tautan web dari hasil pemindaian.',
+      icon: <Search className="w-6 h-6 text-indigo-500" />,
+    },
+    {
+      title: 'Autentikasi Sempurna',
+      desc: 'Masuk secara aman menggunakan email dan kata sandi untuk melindungi data serta sinkronisasi aktivitas pemindaian.',
+      icon: <Key className="w-6 h-6 text-indigo-500" />,
+    },
+    {
+      title: 'Riwayat Retensi 24 Jam',
+      desc: 'Aktivitas pemindaian dicatat rapi dan otomatis terhapus secara permanen setelah 1 hari untuk menjamin keamanan privasi Anda.',
+      icon: <History className="w-6 h-6 text-indigo-500" />,
+    },
+    {
       title: 'Ekspor Terstruktur',
-      desc: 'Hasil pembacaan teks dapat langsung disalin atau diunduh menjadi dokumen TXT alami maupun skema data JSON terstruktur lengkap dengan koordinat kotak deteksi.',
+      desc: 'Simpan hasil bacaan langsung sebagai dokumen teks alami (.txt) atau skema data JSON lengkap dengan koordinat koordinat kotak deteksi.',
       icon: <FileJson className="w-6 h-6 text-indigo-500" />,
     },
   ];
@@ -39,7 +58,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
-          className="w-20 h-20 rounded-full bg-neo-bg shadow-neo-card flex items-center justify-center text-indigo-600 border border-white/60 relative"
+          className="w-20 h-20 rounded-full bg-neo-bg shadow-neo-card flex items-center justify-center text-indigo-600 border border-white/60 relative animate-pulse-slow"
         >
           <Scan className="w-10 h-10" />
           {status === 'online' && (
@@ -71,25 +90,33 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="flex items-center gap-2 px-4 py-2 bg-neo-bg shadow-neo-btn rounded-full border border-white text-xs"
+          className="flex flex-col sm:flex-row items-center gap-3 px-6 py-3.5 bg-neo-bg shadow-neo-btn rounded-neo border border-white text-xs font-bold"
         >
-          {status === 'online' ? (
-            <>
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span className="font-bold text-neo-text">
-                Status: Online | Akselerasi Hardware: <span className="text-indigo-600 uppercase">{device}</span>
-              </span>
-            </>
-          ) : status === 'loading' ? (
-            <>
-              <div className="w-3 h-3 rounded-full border-2 border-t-amber-600 border-amber-200 animate-spin" />
-              <span className="font-bold text-neo-muted">Menghubungkan ke server lokal...</span>
-            </>
-          ) : (
-            <>
-              <ShieldAlert className="w-4 h-4 text-rose-600" />
-              <span className="font-bold text-rose-600">Status: Server Offline (Silakan jalankan backend server.py)</span>
-            </>
+          <div className="flex items-center gap-2">
+            {status === 'online' ? (
+              <>
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span className="text-neo-text">
+                  Status: Online | Akselerasi Hardware: <span className="text-indigo-600 uppercase">{device}</span>
+                </span>
+              </>
+            ) : status === 'loading' ? (
+              <>
+                <div className="w-3 h-3 rounded-full border-2 border-t-indigo-600 border-indigo-200 animate-spin" />
+                <span className="text-neo-muted">Menghubungkan ke server lokal...</span>
+              </>
+            ) : (
+              <>
+                <ShieldAlert className="w-4 h-4 text-rose-600" />
+                <span className="text-rose-600">Status: Server Offline (Silakan jalankan backend server.py)</span>
+              </>
+            )}
+          </div>
+          
+          {isLoggedIn && userEmail && (
+            <div className="sm:border-l sm:border-neo-shadow/45 sm:pl-3 text-indigo-600">
+              Pengguna aktif: <span className="underline">{userEmail}</span>
+            </div>
           )}
         </motion.div>
 
@@ -104,20 +131,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             onClick={onEnterWorkspace}
             className="flex items-center gap-3 px-8 py-4 bg-neo-bg shadow-neo-card hover:shadow-neo-hover rounded-full text-base font-extrabold text-indigo-600 border-2 border-white transition-all duration-300 transform hover:scale-[1.01] active:shadow-neo-pressed"
           >
-            <span>Buka OCR Workspace</span>
+            <span>{isLoggedIn ? 'Buka OCR Workspace' : 'Mulai Ekstraksi Teks'}</span>
             <ArrowRight className="w-5 h-5" />
           </button>
         </motion.div>
       </div>
 
       {/* Features Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full mt-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 w-full mt-4">
         {features.map((feat, idx) => (
           <motion.div
             key={idx}
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.4 + idx * 0.1, duration: 0.5 }}
+            transition={{ delay: 0.4 + idx * 0.08, duration: 0.5 }}
             className="flex flex-col gap-3 p-6 bg-neo-bg rounded-neo shadow-neo-btn border border-white/50 hover:shadow-neo-btn-hover transition-all duration-300"
           >
             <div className="w-12 h-12 rounded-full bg-neo-bg shadow-neo-btn flex items-center justify-center border border-white/40 mb-2">
