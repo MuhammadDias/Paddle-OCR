@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { 
   FileText, Upload, Play, X, Trash2, Download, 
@@ -10,11 +10,17 @@ import type { PDFPageResult, PDFProgressUpdate } from '../services/api';
 interface PdfOcrWorkspaceProps {
   onShowToast: (message: string, type: 'success' | 'error' | 'info') => void;
   onBackToHome: () => void;
+  initialResults?: PDFPageResult[] | null;
+  initialFilename?: string | null;
+  onClearInitialResults?: () => void;
 }
 
 export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
   onShowToast,
   onBackToHome,
+  initialResults = null,
+  initialFilename = null,
+  onClearInitialResults,
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -26,6 +32,20 @@ export const PdfOcrWorkspace: React.FC<PdfOcrWorkspaceProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Sync initial results from history
+  useEffect(() => {
+    if (initialResults && initialResults.length > 0) {
+      setResults(initialResults);
+      setActivePage(1);
+      if (initialFilename) {
+        setSelectedFile(new File([""], initialFilename, { type: "application/pdf" }));
+      }
+      if (onClearInitialResults) {
+        onClearInitialResults();
+      }
+    }
+  }, [initialResults, initialFilename]);
   
   // Refs for synchronized scrolling
   const leftScrollRef = useRef<HTMLDivElement>(null);

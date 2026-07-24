@@ -52,7 +52,7 @@ export interface AuthResponse {
 export interface HistoryItem {
   id: number;
   filename: string;
-  ocr_result: OCRResponse;
+  ocr_result: any;
   created_at: string;
 }
 

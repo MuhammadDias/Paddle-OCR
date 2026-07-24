@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Clock, ChevronRight, History, ShieldAlert, FileImage } from 'lucide-react';
+import { X, Clock, ChevronRight, History, ShieldAlert, FileImage, FileText } from 'lucide-react';
 import { getHistory } from '../services/api';
-import type { HistoryItem, OCRResponse } from '../services/api';
+import type { HistoryItem } from '../services/api';
 
 interface HistoryDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectItem: (result: OCRResponse, filename: string) => void;
+  onSelectItem: (result: any, filename: string) => void;
   onShowToast: (message: string, type: 'success' | 'error') => void;
 }
 
@@ -124,7 +124,11 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-9 h-9 rounded-full bg-neo-bg shadow-neo-pressed flex items-center justify-center text-indigo-400 group-hover:text-indigo-600 flex-shrink-0 border border-white/40 transition-all duration-200">
-                    <FileImage className="w-4.5 h-4.5" />
+                    {item.filename.toLowerCase().endsWith('.pdf') ? (
+                      <FileText className="w-4.5 h-4.5" />
+                    ) : (
+                      <FileImage className="w-4.5 h-4.5" />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <h5 className="text-xs font-bold text-neo-text truncate group-hover:text-indigo-600 transition-colors duration-200">
@@ -136,7 +140,11 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                         <span>{formatTime(item.created_at)}</span>
                       </div>
                       <span className="text-[8px] bg-neo-shadow/30 px-1.5 py-0.5 rounded-full text-neo-muted font-semibold">
-                        {item.ocr_result.stats.total_regions} Region
+                        {item.ocr_result.is_pdf ? (
+                          `${item.ocr_result.stats?.total_pages || 0} Halaman`
+                        ) : (
+                          `${item.ocr_result.stats?.total_regions || 0} Region`
+                        )}
                       </span>
                     </div>
                   </div>

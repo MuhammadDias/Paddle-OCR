@@ -238,7 +238,7 @@ async def process_pdf_ocr(
 
     from core.pdf_processor import process_pdf_generator
     return StreamingResponse(
-        process_pdf_generator(contents, filename),
+        process_pdf_generator(contents, filename, current_user["id"]),
         media_type="application/x-ndjson"
     )
 

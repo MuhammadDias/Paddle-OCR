@@ -32,6 +32,10 @@ function App() {
   const [view, setView] = useState<'landing' | 'workspace' | 'pdf-ocr'>('landing');
   const [user, setUser] = useState<User | null>(null);
 
+  // States for loading PDF from history
+  const [pdfHistoryResults, setPdfHistoryResults] = useState<any[] | null>(null);
+  const [pdfHistoryFilename, setPdfHistoryFilename] = useState<string | null>(null);
+
   // Guard access to pdf-ocr
   useEffect(() => {
     if (view === 'pdf-ocr' && !user) {
@@ -149,16 +153,24 @@ function App() {
     }
   };
 
-  const handleSelectHistoryItem = (historyResult: OCRResponse, filename: string) => {
+  const handleSelectHistoryItem = (historyResult: any, filename: string) => {
     if (imageUrl && !imageUrl.startsWith('data:image')) {
       URL.revokeObjectURL(imageUrl);
     }
-    setOcrResponse(historyResult);
-    setImageUrl(historyResult.annotated_image);
-    const dummyFile = new File([""], filename, { type: "image/jpeg" });
-    setFile(dummyFile);
-    setView('workspace');
-    handleShowToast(`Memuat riwayat: ${filename}`, 'success');
+    
+    if (historyResult.is_pdf) {
+      setPdfHistoryResults(historyResult.pages);
+      setPdfHistoryFilename(filename);
+      setView('pdf-ocr');
+      handleShowToast(`Memuat riwayat PDF: ${filename}`, 'success');
+    } else {
+      setOcrResponse(historyResult);
+      setImageUrl(historyResult.annotated_image);
+      const dummyFile = new File([""], filename, { type: "image/jpeg" });
+      setFile(dummyFile);
+      setView('workspace');
+      handleShowToast(`Memuat riwayat: ${filename}`, 'success');
+    }
   };
 
   return (
@@ -189,6 +201,12 @@ function App() {
             <PdfOcrWorkspace
               onShowToast={handleShowToast}
               onBackToHome={() => setView('landing')}
+              initialResults={pdfHistoryResults}
+              initialFilename={pdfHistoryFilename}
+              onClearInitialResults={() => {
+                setPdfHistoryResults(null);
+                setPdfHistoryFilename(null);
+              }}
             />
           ) : (
             /* Main Workspace */
