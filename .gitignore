@@ -1,4 +1,79 @@
+# ==============================================================================
+# Python Backend Config & Caches
+# ==============================================================================
+# Virtual Environment
 venv/
+.venv/
+env/
+ENV/
+bin/
+lib/
+share/
+
+# Python Cache & Bytecode
 __pycache__/
 *.pyc
-outputs/n 
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime Generated Files & Outputs
+logs/
+*.log
+outputs/*
+assets/outputs/*
+
+# Keep outputs & assets/outputs folders in git, but ignore contents
+!outputs/.gitkeep
+!assets/outputs/.gitkeep
+
+# ==============================================================================
+# Node / Frontend React Config & Caches
+# ==============================================================================
+# Node dependencies
+frontend/node_modules/
+node_modules/
+
+# Production builds
+frontend/dist/
+frontend/dist-ssr/
+dist/
+
+# TypeScript build info
+*.tsbuildinfo
+frontend/*.tsbuildinfo
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# npm/yarn debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==============================================================================
+# Editor & OS Configurations
+# ==============================================================================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db

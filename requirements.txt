@@ -16,3 +16,8 @@ paddleocr>=2.8.1
 
 # Utilities
 tqdm>=4.66.0
+
+# Backend Web Server
+fastapi>=0.111.0
+uvicorn>=0.30.1
+python-multipart>=0.0.9
