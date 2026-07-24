@@ -30,6 +30,7 @@ export const OCRImageViewer: React.FC<OCRImageViewerProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   // Reset zoom & pan when image changes
   useEffect(() => {
@@ -70,6 +71,40 @@ export const OCRImageViewer: React.FC<OCRImageViewerProps> = ({
       setPan({ x: 0, y: 0 });
     }
   }, [selectedIndex, regions, imgDims]);
+
+  // Scroll to zoom on mouse wheel inside the image viewport
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault(); // Prevent full page scroll
+
+      const zoomFactor = 0.15; // Speed of zoom
+      setZoom((prevZoom) => {
+        let nextZoom = prevZoom;
+        if (e.deltaY < 0) {
+          // Zoom in
+          nextZoom = Math.min(prevZoom + zoomFactor, 4);
+        } else {
+          // Zoom out
+          nextZoom = Math.max(prevZoom - zoomFactor, 0.5);
+        }
+
+        // Reset pan if zoom goes back to 1
+        if (nextZoom === 1) {
+          setPan({ x: 0, y: 0 });
+        }
+
+        return nextZoom;
+      });
+    };
+
+    viewport.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   // Handle image load to get dimensions
   const handleImageLoad = () => {
@@ -195,6 +230,7 @@ export const OCRImageViewer: React.FC<OCRImageViewerProps> = ({
 
       {/* Image Viewport */}
       <div
+        ref={viewportRef}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
