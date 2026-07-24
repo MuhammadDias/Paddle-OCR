@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Copy, Check, FileJson, FileText } from 'lucide-react';
 import type { TextRegion } from '../services/api';
 import { OCRResultItem } from './OCRResultItem';
@@ -23,6 +23,16 @@ export const OCRResultList: React.FC<OCRResultListProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [isCopyAllCopied, setIsCopyAllCopied] = useState<boolean>(false);
+
+  // Scroll to selected item when selectedIndex changes
+  useEffect(() => {
+    if (selectedIndex !== null && regions[selectedIndex]) {
+      const element = document.getElementById(`ocr-item-${regions[selectedIndex].index}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [selectedIndex, regions]);
 
   // Filter regions based on search query
   const filteredRegions = useMemo(() => {

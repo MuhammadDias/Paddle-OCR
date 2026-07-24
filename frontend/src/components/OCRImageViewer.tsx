@@ -37,6 +37,40 @@ export const OCRImageViewer: React.FC<OCRImageViewerProps> = ({
     setPan({ x: 0, y: 0 });
   }, [imageUrl]);
 
+  // Zoom and pan to selected bounding box when selectedIndex changes
+  useEffect(() => {
+    if (selectedIndex !== null && regions[selectedIndex] && imgRef.current && imgDims.width > 0) {
+      const region = regions[selectedIndex];
+      const xs = region.box.map((pt) => pt[0]);
+      const ys = region.box.map((pt) => pt[1]);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+
+      const centerX = minX + (maxX - minX) / 2;
+      const centerY = minY + (maxY - minY) / 2;
+
+      const imgWidth = imgRef.current.clientWidth;
+      const imgHeight = imgRef.current.clientHeight;
+
+      const dx = (centerX / imgDims.width) * imgWidth;
+      const dy = (centerY / imgDims.height) * imgHeight;
+
+      // Center the box in the viewport container
+      const panX = imgWidth / 2 - dx;
+      const panY = imgHeight / 2 - dy;
+
+      // Zoom in to 1.8x for text readability, or keep current zoom if it's already higher
+      setZoom(Math.max(zoom, 1.8));
+      setPan({ x: panX, y: panY });
+    } else if (selectedIndex === null) {
+      // Reset view to original state when selection is cleared
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    }
+  }, [selectedIndex, regions, imgDims]);
+
   // Handle image load to get dimensions
   const handleImageLoad = () => {
     if (imgRef.current) {
@@ -172,7 +206,7 @@ export const OCRImageViewer: React.FC<OCRImageViewerProps> = ({
         <div
           style={{
             transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
-            transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+            transition: isDragging ? 'none' : 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)',
           }}
           className="relative max-w-full max-h-full flex items-center justify-center transform-gpu"
         >

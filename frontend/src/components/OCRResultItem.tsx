@@ -42,6 +42,7 @@ export const OCRResultItem: React.FC<OCRResultItemProps> = ({
 
   return (
     <div
+      id={`ocr-item-${region.index}`}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
       onClick={onSelect}
